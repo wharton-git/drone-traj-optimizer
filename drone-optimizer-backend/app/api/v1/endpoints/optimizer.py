@@ -1,45 +1,53 @@
 from fastapi import APIRouter, HTTPException
-from app.models.optimization import OptimizationRequest, OptimizationResponse, Decision
-from app.services.solver import solve_optimal_speed
+from app.models.optimization import (
+    OptimizationRequest,
+    OptimizationResponse,
+    Decision,
+)
+from app.services.solver import solve_optimal_speed_admc, build_decision
 
 router = APIRouter()
 
+
 @router.post("/optimize", response_model=OptimizationResponse)
 async def optimize_drone_path(request: OptimizationRequest):
-    
-    result = solve_optimal_speed(
-        request.wind_speed, 
-        request.drone_mass, 
-        request.start_point, 
-        request.end_point, 
-        request.no_go_zones
+    user_weights = (
+        request.weights.model_dump()
+        if request.weights is not None
+        else {"energy": 0.30, "time": 0.25, "distance": 0.15, "risk": 0.30}
     )
-    
+
+    result = solve_optimal_speed_admc(
+        wind_speed=request.wind_speed,
+        drone_mass=request.drone_mass,
+        battery_capacity=request.battery_capacity,
+        start_coord=request.start_point,
+        end_coord=request.end_point,
+        no_go_zones=request.no_go_zones,
+        user_weights=user_weights,
+    )
+
     if not result["success"]:
-        raise HTTPException(status_code=400, detail="Le solveur PNL n'a pas pu trouver de trajectoire évitant les obstacles.")
-    
-    baseline = result["baseline"]
-    optimized = result["optimized"]
-    batt = request.battery_capacity
+        raise HTTPException(
+            status_code=400,
+            detail="Le solveur PNL/ADMC n'a pas pu générer d'alternatives valides."
+        )
 
-
-    if optimized["energy"] > batt:
-        status = "NO_GO"
-        msg = f"NO-GO : Même avec contournement et vitesse optimale ({optimized['speed']} m/s), la mission nécessite {optimized['energy']}J, dépassant la batterie ({batt}J)."
-    elif baseline["energy"] > batt and optimized["energy"] <= batt:
-        status = "WARNING"
-        msg = f"ATTENTION : Un vol naïf écraserait le drone ({baseline['energy']}J). L'algorithme a généré un contournement sécurisé à {optimized['speed']} m/s consommant {optimized['energy']}J."
-    else:
-        status = "GO"
-        msg = f"GO : Mission sécurisée. La trajectoire évite les obstacles à {optimized['speed']} m/s ({optimized['energy']}J)."
-
-    decision = Decision(status=status, message=msg)
+    best_alt = result["alternatives"][0]
+    decision_data = build_decision(
+        battery_capacity=request.battery_capacity,
+        baseline=result["baseline"],
+        best_alternative=best_alt,
+    )
+    decision = Decision(**decision_data)
 
     return OptimizationResponse(
-        baseline=baseline,
-        optimized=optimized,
-        battery_capacity=batt,
+        baseline=result["baseline"],
+        optimized=result["optimized"],
+        battery_capacity=request.battery_capacity,
         path=result["path"],
+        alternatives=result["alternatives"],
+        recommended_profile=result["recommended_profile"],
         decision=decision,
-        success=True
+        success=True,
     )
