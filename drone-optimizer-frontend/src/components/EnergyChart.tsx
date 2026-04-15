@@ -10,10 +10,9 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ data }) => {
 
     // Génération de la série de données pour le comparatif Recharts
     const chartData = useMemo(() => {
-        // On s'assure que le backend a bien renvoyé les objets 'baseline' et 'optimized'
         if (!data || !data.success || !data.baseline || !data.optimized) return [];
 
-        return[
+        return [
             {
                 name: 'Trajet Naïf (Vmax)',
                 'Énergie Consommée': data.baseline.energy,
@@ -22,7 +21,6 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ data }) => {
             {
                 name: 'Trajet PNL (Optimal)',
                 'Énergie Consommée': data.optimized.energy,
-                // Rouge si l'énergie optimisée dépasse la batterie, sinon Vert de succès
                 fill: data.optimized.energy > data.battery_capacity ? '#ef4444' : '#22c55e'
             }
         ];
@@ -49,28 +47,27 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ data }) => {
                             contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                             cursor={{ fill: 'transparent' }}
                         />
-                        
-                        {/* LIGNE DE CONTRAINTE BATTERIE */}
+
                         {data.battery_capacity && (
-                            <ReferenceLine 
-                                y={data.battery_capacity} 
-                                stroke="#ef4444" 
-                                strokeDasharray="5 5" 
+                            <ReferenceLine
+                                y={data.battery_capacity}
+                                stroke="#ef4444"
+                                strokeDasharray="5 5"
                                 strokeWidth={2}
-                                label={{ 
-                                    position: 'top', 
-                                    value: `Capacité Batterie Max (${data.battery_capacity} J)`, 
-                                    fill: '#ef4444', 
+                                label={{
+                                    position: 'top',
+                                    value: `Capacité Batterie Max (${data.battery_capacity} J)`,
+                                    fill: '#ef4444',
                                     fontSize: 12,
                                     fontWeight: 'bold'
-                                }} 
+                                }}
                             />
                         )}
 
-                        <Bar 
-                            dataKey="Énergie Consommée" 
-                            radius={[6, 6, 0, 0]} 
-                            maxBarSize={80} 
+                        <Bar
+                            dataKey="Énergie Consommée"
+                            radius={[6, 6, 0, 0]}
+                            maxBarSize={80}
                         />
                     </BarChart>
                 </ResponsiveContainer>

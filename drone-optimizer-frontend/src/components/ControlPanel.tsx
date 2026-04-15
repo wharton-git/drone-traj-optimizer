@@ -10,8 +10,8 @@ interface ControlPanelProps {
     setEndCoord: (c: Coordinate) => void;
     batteryCapacity: number;
     setBatteryCapacity: (val: number) => void;
-    noGoZones: NoGoZone[];                     // NOUVEAU
-    setNoGoZones: (zones: NoGoZone[]) => void; // NOUVEAU
+    noGoZones: NoGoZone[];
+    setNoGoZones: (zones: NoGoZone[]) => void;
     data?: OptimizationResponse;
 }
 
@@ -31,7 +31,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         onSimulate({
             wind_speed: windSpeed,
             drone_mass: droneMass,
-            battery_capacity: batteryCapacity, // Ajout au payload
+            battery_capacity: batteryCapacity,
             start_point: startCoord,
             end_point: endCoord,
             no_go_zones: noGoZones
@@ -79,7 +79,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                 </div>
             </div>
 
-            {/* BATTERIE (NOUVEAU) */}
             <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">Capacité Batterie (Joules)</label>
                 <input
@@ -88,7 +87,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                     value={batteryCapacity} onChange={(e) => setBatteryCapacity(parseFloat(e.target.value))}
                 />
             </div>
-            {/* ZONES INTERDITES */}
             <div className="bg-red-50 p-3 rounded border border-red-200 mt-4">
                 <div className="flex justify-between items-center mb-2">
                     <label className="block text-xs font-bold text-red-800">Zones Interdites (No-Go)</label>

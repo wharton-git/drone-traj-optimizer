@@ -7,7 +7,6 @@ router = APIRouter()
 @router.post("/optimize", response_model=OptimizationResponse)
 async def optimize_drone_path(request: OptimizationRequest):
     
-    # Résolution PNL (avec les No-Go Zones)
     result = solve_optimal_speed(
         request.wind_speed, 
         request.drone_mass, 
@@ -17,14 +16,13 @@ async def optimize_drone_path(request: OptimizationRequest):
     )
     
     if not result["success"]:
-        # Si le solveur ne trouve pas de chemin (ex: zone trop vaste bloquant le passage)
         raise HTTPException(status_code=400, detail="Le solveur PNL n'a pas pu trouver de trajectoire évitant les obstacles.")
     
     baseline = result["baseline"]
     optimized = result["optimized"]
     batt = request.battery_capacity
 
-    # MOTEUR DE RÈGLES
+
     if optimized["energy"] > batt:
         status = "NO_GO"
         msg = f"NO-GO : Même avec contournement et vitesse optimale ({optimized['speed']} m/s), la mission nécessite {optimized['energy']}J, dépassant la batterie ({batt}J)."
@@ -41,7 +39,7 @@ async def optimize_drone_path(request: OptimizationRequest):
         baseline=baseline,
         optimized=optimized,
         battery_capacity=batt,
-        path=result["path"], # NOUVEAU : [Départ, Waypoint de contournement, Arrivée]
+        path=result["path"],
         decision=decision,
         success=True
     )

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useOptimization } from './hooks/useOptimization';
 import type { OptimizationPayload, Coordinate, NoGoZone } from './types';
 
-// Composants
 import ControlPanel from './components/ControlPanel';
 import MapView from './components/MapView';
 import EnergyChart from './components/EnergyChart';
@@ -12,10 +11,9 @@ const App: React.FC = () => {
 
   const [startCoord, setStartCoord] = useState<Coordinate>([-18.8792, 47.5079]);
   const [endCoord, setEndCoord] = useState<Coordinate>([-18.9145, 47.5312]);
-  const[batteryCapacity, setBatteryCapacity] = useState<number>(30000);
+  const [batteryCapacity, setBatteryCapacity] = useState<number>(30000);
   const [noGoZones, setNoGoZones] = useState<NoGoZone[]>([]);
 
-  // Fonction appelée par le panneau de contrôle lors de la soumission
   const handleSimulate = (params: OptimizationPayload) => {
     optimize(params);
   };
@@ -23,7 +21,6 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-50 text-slate-800 font-sans">
 
-      {/* PANNEAU LATÉRAL : Formulaire et paramètres (25% de l'écran) */}
       <aside className="w-1/4 h-full bg-white shadow-lg z-10 flex flex-col">
         <div className="p-6 border-b border-slate-200">
           <h1 className="text-xl font-bold text-blue-900">ADMC Drone Opti</h1>
@@ -46,11 +43,9 @@ const App: React.FC = () => {
             <div className="mt-8 p-4 bg-green-50 border border-green-200 rounded-md">
               <h3 className="font-semibold text-green-800 mb-2">Convergence atteinte</h3>
               <ul className="text-sm space-y-1">
-                {/* On pointe désormais vers result.optimized */}
                 <li>Vitesse opt. : <span className="font-mono text-green-700 font-bold">{result.optimized.speed.toFixed(2)} m/s</span></li>
                 <li>Énergie min. : <span className="font-mono text-green-700 font-bold">{result.optimized.energy.toFixed(2)} J</span></li>
-                
-                {/* Petit bonus d'aide à la décision : on affiche aussi le coût du trajet non-optimisé */}
+
                 <li className="pt-2 mt-2 border-t border-green-200 text-xs text-slate-600">
                   vs Trajet Naïf : {result.baseline.energy.toFixed(2)} J (à {result.baseline.speed.toFixed(2)} m/s)
                 </li>
@@ -66,7 +61,6 @@ const App: React.FC = () => {
         </div>
       </aside>
 
-      {/* ESPACE DE VISUALISATION : Carte + Graphiques (75% de l'écran) */}
       <main className="flex-1 flex flex-col h-full relative">
 
         <section className="h-[60%] w-full bg-slate-200 relative z-0">
@@ -82,7 +76,6 @@ const App: React.FC = () => {
           <EnergyChart data={result} />
         </section>
 
-        {/* Overlay de chargement */}
         {isPending && (
           <div className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm flex items-center justify-center z-50">
             <div className="bg-white px-6 py-4 rounded-lg shadow-2xl flex items-center gap-3 font-medium text-blue-700 animate-pulse border border-blue-100">

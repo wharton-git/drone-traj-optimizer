@@ -21,7 +21,7 @@ interface MapViewProps {
     setNoGoZones: (zones: NoGoZone[]) => void;
 }
 
-// 1. COMPOSANT CACHÉ : Gère le clic sur la carte
+
 const MapInteractionHandler: React.FC<{ setClickedCoord: (c: Coordinate) => void }> = ({ setClickedCoord }) => {
     useMapEvents({
         click(e) {
@@ -31,7 +31,6 @@ const MapInteractionHandler: React.FC<{ setClickedCoord: (c: Coordinate) => void
     return null;
 };
 
-// 2. COMPOSANT DE RECHERCHE : UI par-dessus la carte interagissant avec Nominatim
 const SearchControl: React.FC = () => {
     const [query, setQuery] = useState('');
     const map = useMap();
@@ -41,12 +40,11 @@ const SearchControl: React.FC = () => {
         if (!query) return;
 
         try {
-            // API de Geocoding OpenStreetMap
             const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
             const data = await res.json();
             if (data && data.length > 0) {
                 const { lat, lon } = data[0];
-                map.flyTo([parseFloat(lat), parseFloat(lon)], 14); // Anime la caméra vers le lieu
+                map.flyTo([parseFloat(lat), parseFloat(lon)], 14);
             } else {
                 alert("Lieu non trouvé.");
             }
@@ -81,7 +79,7 @@ const MapView: React.FC<MapViewProps> = ({ path, startCoord, setStartCoord, endC
 
     const handleAddNoGoZone = () => {
         if (clickedCoord) {
-            setNoGoZones([...noGoZones, { center: clickedCoord, radius: 1000 }]); // Rayon par défaut : 1km
+            setNoGoZones([...noGoZones, { center: clickedCoord, radius: 1000 }]);
             setClickedCoord(null);
         }
     };
@@ -94,15 +92,12 @@ const MapView: React.FC<MapViewProps> = ({ path, startCoord, setStartCoord, endC
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
 
-                {/* <SearchControl /> */}
-                <SearchControl/>
+                <SearchControl />
                 <MapInteractionHandler setClickedCoord={setClickedCoord} />
 
-                {/* POPUP CONTEXTUEL SUR CLIC MIS A JOUR */}
                 {clickedCoord && (
                     <Popup
                         position={clickedCoord}
-                        // onClose={() => setClickedCoord(null)}
                     >
                         <div className="text-center w-40">
                             <p className="text-xs font-bold text-slate-500 mb-2 border-b pb-1">Action à cette position :</p>
@@ -113,7 +108,6 @@ const MapView: React.FC<MapViewProps> = ({ path, startCoord, setStartCoord, endC
                                 <button onClick={handleSetEnd} className="bg-blue-600 text-white text-xs px-2 py-1 rounded hover:bg-blue-700">
                                     Définir comme Arrivée
                                 </button>
-                                {/* LE NOUVEAU BOUTON D'OBSTACLE */}
                                 <button onClick={handleAddNoGoZone} className="bg-red-600 text-white text-xs px-2 py-1 rounded mt-1 hover:bg-red-700 font-bold">
                                     Ajouter Zone (1km)
                                 </button>
@@ -125,7 +119,6 @@ const MapView: React.FC<MapViewProps> = ({ path, startCoord, setStartCoord, endC
                 <Marker position={startCoord}><Popup>Départ actuel</Popup></Marker>
                 <Marker position={endCoord}><Popup>Arrivée actuelle</Popup></Marker>
 
-                {/* AFFICHAGE DES CERCLES ROUGES DES NO-GO ZONES */}
                 {noGoZones.map((zone, index) => (
                     <Circle
                         key={index}
@@ -137,7 +130,6 @@ const MapView: React.FC<MapViewProps> = ({ path, startCoord, setStartCoord, endC
                     </Circle>
                 ))}
 
-                {/* TRACÉ PNL */}
                 {path && path.length > 0 && (
                     <Polyline positions={path} color="#2563eb" weight={4} dashArray="10, 10" />
                 )}

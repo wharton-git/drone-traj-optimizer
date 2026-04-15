@@ -2,8 +2,8 @@ from pydantic import BaseModel
 from typing import List, Tuple, Optional
 
 class NoGoZone(BaseModel):
-    center: Tuple[float, float]  # (Lat, Lng)
-    radius: float                # Rayon en mètres
+    center: Tuple[float, float]
+    radius: float
 
 class OptimizationRequest(BaseModel):
     wind_speed: float
@@ -11,7 +11,7 @@ class OptimizationRequest(BaseModel):
     battery_capacity: float
     start_point: Tuple[float, float]
     end_point: Tuple[float, float]
-    no_go_zones: Optional[List[NoGoZone]] =[]  # NOUVEAU : Liste optionnelle
+    no_go_zones: Optional[List[NoGoZone]] =[]
 
 class ScenarioResult(BaseModel):
     speed: float
@@ -26,6 +26,6 @@ class OptimizationResponse(BaseModel):
     baseline: ScenarioResult
     optimized: ScenarioResult
     battery_capacity: float
-    path: List[Tuple[float, float]]  # Contiendra [Départ, Waypoint, Arrivée]
+    path: List[Tuple[float, float]]
     decision: Decision
     success: bool
