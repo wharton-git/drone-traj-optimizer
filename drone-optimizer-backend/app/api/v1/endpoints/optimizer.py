@@ -33,7 +33,11 @@ async def optimize_drone_path(request: OptimizationRequest):
             detail="Le solveur PNL/ADMC n'a pas pu générer d'alternatives valides."
         )
 
-    best_alt = result["alternatives"][0]
+    best_alt = next(
+        (a for a in result["alternatives"] if a["profile"] == result["recommended_profile"]),
+        result["alternatives"][0]
+    )
+
     decision_data = build_decision(
         battery_capacity=request.battery_capacity,
         baseline=result["baseline"],

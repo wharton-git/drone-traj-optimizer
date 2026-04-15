@@ -10,13 +10,25 @@ PROFILE_WEIGHTS = {
     "balanced": {"energy": 0.30, "time": 0.25, "distance": 0.15, "risk": 0.30},
 }
 
+MIN_SPEED = 5.0
+MAX_SPEED = 30.0
+
+# marge opérationnelle minimale réaliste
+MIN_OPERATIONAL_CLEARANCE_M = 30.0
+
+# au-delà de ce facteur de détour, on considère la solution non crédible
+MAX_DETOUR_FACTOR = 3.0
+
+# largeur du corridor de recherche autour de la mission
+SEARCH_MARGIN_M = 2000.0
+
 
 def to_cartesian(coord, ref):
     lat, lon = coord
     ref_lat, ref_lon = ref
     x = (lon - ref_lon) * 111320 * math.cos(math.radians(ref_lat))
     y = (lat - ref_lat) * 111000
-    return np.array([x], dtype=float) if False else np.array([x, y], dtype=float)
+    return np.array([x, y], dtype=float)
 
 
 def to_latlon(cartesian, ref):
@@ -77,35 +89,51 @@ def compute_path_distance(pts):
     return float(sum(np.linalg.norm(pts[i + 1] - pts[i]) for i in range(len(pts) - 1)))
 
 
+def compute_direct_distance(A, B):
+    return float(np.linalg.norm(B - A))
+
+
 def compute_clearance_stats(pts, no_go_zones, start_coord):
     if not no_go_zones:
         return {
             "risk": 0.0,
-            "min_clearance_m": float("inf"),
+            "min_clearance_m": 999999.0,
+            "buffer_clearance_m": 999999.0,
         }
 
-    min_clearance = float("inf")
+    min_clearance_obstacle_edge = float("inf")
+    min_clearance_operational_buffer = float("inf")
 
     for zone in no_go_zones:
         P = to_cartesian(zone.center, ref=start_coord)
-        protected_radius = float(zone.radius) + 15.0
+
+        obstacle_radius = float(zone.radius)
+        operational_radius = obstacle_radius + MIN_OPERATIONAL_CLEARANCE_M
 
         for i in range(len(pts) - 1):
             d = point_to_segment_distance(pts[i], pts[i + 1], P)
-            clearance = d - protected_radius
-            min_clearance = min(min_clearance, clearance)
 
-    if min_clearance == float("inf"):
-        min_clearance = 999999.0
+            clearance_obstacle_edge = d - obstacle_radius
+            clearance_operational_buffer = d - operational_radius
 
-    if min_clearance <= 0:
+            min_clearance_obstacle_edge = min(min_clearance_obstacle_edge, clearance_obstacle_edge)
+            min_clearance_operational_buffer = min(min_clearance_operational_buffer, clearance_operational_buffer)
+
+    if min_clearance_obstacle_edge == float("inf"):
+        min_clearance_obstacle_edge = 999999.0
+
+    if min_clearance_operational_buffer == float("inf"):
+        min_clearance_operational_buffer = 999999.0
+
+    if min_clearance_operational_buffer <= 0:
         risk = 1e6
     else:
-        risk = 1.0 / min_clearance
+        risk = 1.0 / min_clearance_operational_buffer
 
     return {
         "risk": float(risk),
-        "min_clearance_m": float(min_clearance),
+        "min_clearance_m": float(min_clearance_obstacle_edge),
+        "buffer_clearance_m": float(min_clearance_operational_buffer),
     }
 
 
@@ -123,6 +151,7 @@ def evaluate_metrics(v, pts, wind_speed, drone_mass, start_coord, no_go_zones):
         "distance_m": float(total_dist),
         "risk": float(clearance_stats["risk"]),
         "min_clearance_m": float(clearance_stats["min_clearance_m"]),
+        "buffer_clearance_m": float(clearance_stats["buffer_clearance_m"]),
     }
 
 
@@ -147,7 +176,7 @@ def build_constraints(no_go_zones, start_coord, n_segments, get_points_callable)
 
     for zone in no_go_zones:
         P = to_cartesian(zone.center, ref=start_coord)
-        R = float(zone.radius) + 15.0
+        R = float(zone.radius) + MIN_OPERATIONAL_CLEARANCE_M
 
         for i in range(n_segments):
             constraints.append(make_constraint(P, R, i))
@@ -155,8 +184,27 @@ def build_constraints(no_go_zones, start_coord, n_segments, get_points_callable)
     return constraints
 
 
+def build_waypoint_bounds(A, B):
+    xmin = min(A[0], B[0]) - SEARCH_MARGIN_M
+    xmax = max(A[0], B[0]) + SEARCH_MARGIN_M
+    ymin = min(A[1], B[1]) - SEARCH_MARGIN_M
+    ymax = max(A[1], B[1]) + SEARCH_MARGIN_M
+    return xmin, xmax, ymin, ymax
+
+
+def build_bounds(A, B, n_wp):
+    xmin, xmax, ymin, ymax = build_waypoint_bounds(A, B)
+
+    bounds = [(MIN_SPEED, MAX_SPEED)]
+    for _ in range(n_wp):
+        bounds.append((xmin, xmax))
+        bounds.append((ymin, ymax))
+
+    return bounds
+
+
 def build_reference_scales(A, B, wind_speed, drone_mass, start_coord, no_go_zones):
-    direct_dist = float(np.linalg.norm(B - A))
+    direct_dist = compute_direct_distance(A, B)
     direct_dist = max(direct_dist, 1.0)
 
     reference_speed = 15.0
@@ -201,6 +249,28 @@ def build_weighted_objective(profile_weights, scales, wind_speed, drone_mass, st
     return objective
 
 
+def evaluate_credibility(alt, direct_distance):
+    reasons = []
+
+    if alt["buffer_clearance_m"] < 0:
+        reasons.append(
+            f"clearance too low (< {MIN_OPERATIONAL_CLEARANCE_M} m)"
+        )
+
+    if direct_distance > 0:
+        detour_factor = alt["distance_m"] / direct_distance
+        if detour_factor > MAX_DETOUR_FACTOR:
+            reasons.append(
+                f"detour too large (> {MAX_DETOUR_FACTOR}x direct distance)"
+            )
+
+    if not alt["feasible_battery"]:
+        reasons.append("battery exceeded")
+
+    credible = len(reasons) == 0
+    return credible, reasons
+
+
 def solve_single_profile(profile_name, profile_weights, wind_speed, drone_mass, start_coord, end_coord, no_go_zones, battery_capacity):
     A = to_cartesian(start_coord, ref=start_coord)
     B = to_cartesian(end_coord, ref=start_coord)
@@ -211,7 +281,7 @@ def solve_single_profile(profile_name, profile_weights, wind_speed, drone_mass, 
     def get_points(x):
         return get_points_from_x(x, A, B, n_wp)
 
-    bounds = [(5.0, 30.0)] + [(None, None)] * (2 * n_wp)
+    bounds = build_bounds(A, B, n_wp)
     constraints = build_constraints(no_go_zones, start_coord, n_wp + 1, get_points)
     scales = build_reference_scales(A, B, wind_speed, drone_mass, start_coord, no_go_zones)
 
@@ -248,10 +318,13 @@ def solve_single_profile(profile_name, profile_weights, wind_speed, drone_mass, 
         "flight_time_seconds": round(metrics["flight_time_seconds"], 2),
         "distance_m": round(metrics["distance_m"], 2),
         "risk": round(metrics["risk"], 6),
-        "min_clearance_m": round(metrics["min_clearance_m"], 2) if math.isfinite(metrics["min_clearance_m"]) else 999999.0,
+        "min_clearance_m": round(metrics["min_clearance_m"], 2),
+        "buffer_clearance_m": round(metrics["buffer_clearance_m"], 2),
         "raw_score": float(result.fun),
-        "weighted_score": 0.0,  # rempli plus tard selon les préférences utilisateur
+        "weighted_score": 0.0,
         "feasible_battery": metrics["energy"] <= battery_capacity,
+        "credible": False,
+        "rejection_reasons": [],
         "path": path_gps,
     }
 
@@ -283,7 +356,15 @@ def score_alternatives_with_user_weights(alternatives, user_weights):
         )
         alt["weighted_score"] = round(float(score), 6)
 
-    alternatives.sort(key=lambda a: (not a["feasible_battery"], a["weighted_score"], a["energy"]))
+    # crédibles d'abord, puis batterie, puis score
+    alternatives.sort(
+        key=lambda a: (
+            not a["credible"],
+            not a["feasible_battery"],
+            a["weighted_score"],
+            a["energy"],
+        )
+    )
     return alternatives
 
 
@@ -302,14 +383,33 @@ def build_baseline(wind_speed, drone_mass, start_coord, end_coord):
     }
 
 
+def choose_best_alternative(alternatives):
+    credible_alts = [a for a in alternatives if a["credible"] and a["feasible_battery"]]
+    if credible_alts:
+        return credible_alts[0]
+
+    feasible_alts = [a for a in alternatives if a["feasible_battery"]]
+    if feasible_alts:
+        return feasible_alts[0]
+
+    return alternatives[0]
+
+
 def build_decision(battery_capacity, baseline, best_alternative):
-    if best_alternative["energy"] > battery_capacity:
+    if not best_alternative["feasible_battery"]:
         status = "NO_GO"
         msg = (
-            f"NO-GO : même la meilleure alternative ADMC "
-            f"({best_alternative['profile']}, {best_alternative['speed']} m/s) "
-            f"nécessite {best_alternative['energy']} J, au-delà de la batterie "
-            f"({battery_capacity} J)."
+            f"NO-GO : aucune alternative crédible n'est compatible avec la batterie. "
+            f"La meilleure option disponible est '{best_alternative['profile']}' "
+            f"mais elle nécessite {best_alternative['energy']} J pour une batterie de "
+            f"{battery_capacity} J."
+        )
+    elif not best_alternative["credible"]:
+        status = "WARNING"
+        msg = (
+            f"ATTENTION : l'alternative recommandée '{best_alternative['profile']}' "
+            f"reste non crédible opérationnellement ({', '.join(best_alternative['rejection_reasons'])}). "
+            f"Énergie = {best_alternative['energy']} J, marge minimale = {best_alternative['min_clearance_m']} m."
         )
     elif baseline["energy"] > battery_capacity and best_alternative["energy"] <= battery_capacity:
         status = "WARNING"
@@ -345,6 +445,10 @@ def solve_optimal_speed_admc(
 
     baseline = build_baseline(wind_speed, drone_mass, start_coord, end_coord)
 
+    A = to_cartesian(start_coord, ref=start_coord)
+    B = to_cartesian(end_coord, ref=start_coord)
+    direct_distance = compute_direct_distance(A, B)
+
     alternatives = []
     for profile_name, profile_weights in PROFILE_WEIGHTS.items():
         alt = solve_single_profile(
@@ -358,6 +462,9 @@ def solve_optimal_speed_admc(
             battery_capacity=battery_capacity,
         )
         if alt is not None:
+            credible, reasons = evaluate_credibility(alt, direct_distance)
+            alt["credible"] = credible
+            alt["rejection_reasons"] = reasons
             alternatives.append(alt)
 
     if not alternatives:
@@ -371,7 +478,7 @@ def solve_optimal_speed_admc(
         }
 
     alternatives = score_alternatives_with_user_weights(alternatives, user_weights)
-    best = alternatives[0]
+    best = choose_best_alternative(alternatives)
 
     optimized = {
         "speed": best["speed"],

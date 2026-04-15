@@ -46,8 +46,11 @@ class AlternativeResult(BaseModel):
     distance_m: float
     risk: float
     min_clearance_m: float
+    buffer_clearance_m: float
     weighted_score: float
     feasible_battery: bool
+    credible: bool
+    rejection_reasons: List[str]
     path: List[Tuple[float, float]]
 
 
