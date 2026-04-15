@@ -82,6 +82,16 @@ const App: React.FC = () => {
                 <li>
                   Score : <span className="font-mono font-bold text-slate-700">{selectedAlternative.weighted_score.toFixed(4)}</span>
                 </li>
+                <li>
+                  Marge obstacle : <span className="font-mono font-bold text-slate-700">
+                    {selectedAlternative.min_clearance_m >= 1e5 ? 'N/A' : `${selectedAlternative.min_clearance_m.toFixed(2)} m`}
+                  </span>
+                </li>
+                <li>
+                  Buffer restant : <span className="font-mono font-bold text-slate-700">
+                    {selectedAlternative.buffer_clearance_m >= 1e5 ? 'N/A' : `${selectedAlternative.buffer_clearance_m.toFixed(2)} m`}
+                  </span>
+                </li>
                 <li className="pt-2 mt-2 border-t border-slate-200 text-xs text-slate-600">
                   Baseline : {result.baseline.energy.toFixed(2)} J à {result.baseline.speed.toFixed(2)} m/s
                 </li>
@@ -114,10 +124,10 @@ const App: React.FC = () => {
             windSpeed={windSpeed}
             windDirectionDeg={windDirectionDeg}
           /><div>
-                        Direction : <span className="font-semibold">{windDirectionDeg.toFixed(0)}°</span>
-                    </div><div>
-                        Direction : <span className="font-semibold">{windDirectionDeg.toFixed(0)}°</span>
-                    </div>
+            Direction : <span className="font-semibold">{windDirectionDeg.toFixed(0)}°</span>
+          </div><div>
+            Direction : <span className="font-semibold">{windDirectionDeg.toFixed(0)}°</span>
+          </div>
         </section>
 
         <section className="h-[40%] w-full p-4 border-t border-slate-300 bg-white z-10 relative min-w-0">

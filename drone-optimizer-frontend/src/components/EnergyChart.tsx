@@ -18,6 +18,22 @@ interface EnergyChartProps {
     setSelectedProfile: (profile: string | null) => void;
 }
 
+const CLEARANCE_SENTINEL_THRESHOLD = 1e5;
+
+const formatClearance = (value: number) => {
+    if (!Number.isFinite(value) || value >= CLEARANCE_SENTINEL_THRESHOLD) {
+        return 'N/A';
+    }
+    return `${value.toFixed(2)} m`;
+};
+
+const formatRisk = (value: number) => {
+    if (!Number.isFinite(value) || value === 0) {
+        return 'N/A';
+    }
+    return value.toFixed(6);
+};
+
 const profileLabels: Record<string, string> = {
     eco: 'Éco',
     balanced: 'Équilibré',
@@ -48,7 +64,7 @@ const CustomTooltip = ({ active, payload }: any) => {
                     <div>Distance : <span className="font-semibold">{point.distance_m.toFixed(2)} m</span></div>
                 )}
                 {'min_clearance_m' in point && (
-                    <div>Marge : <span className="font-semibold">{point.min_clearance_m.toFixed(2)} m</span></div>
+                    <div>Marge : <span className="font-semibold">{formatClearance(point.min_clearance_m)}</span></div>
                 )}
                 {'weighted_score' in point && (
                     <div>Score : <span className="font-semibold">{point.weighted_score.toFixed(4)}</span></div>
@@ -60,6 +76,9 @@ const CustomTooltip = ({ active, payload }: any) => {
                             {point.credible ? 'Crédible' : 'Non crédible'}
                         </span>
                     </div>
+                )}
+                {'risk' in point && (
+                    <div>Risque : <span className="font-semibold">{formatRisk(point.risk)}</span></div>
                 )}
             </div>
         </div>

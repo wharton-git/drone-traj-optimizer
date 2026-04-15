@@ -28,6 +28,21 @@ interface ControlPanelProps {
     setWindDirectionDeg: (val: number) => void;
 }
 
+const CLEARANCE_SENTINEL_THRESHOLD = 1e5;
+
+const formatClearance = (value: number) => {
+    if (!Number.isFinite(value) || value >= CLEARANCE_SENTINEL_THRESHOLD) {
+        return 'N/A';
+    }
+    return `${value.toFixed(2)} m`;
+};
+
+const formatRisk = (value: number) => {
+    if (!Number.isFinite(value)) return 'N/A';
+    if (value === 0) return 'N/A';
+    return value.toFixed(6);
+};
+
 const profileLabels: Record<string, string> = {
     eco: 'Éco',
     balanced: 'Équilibré',
@@ -352,7 +367,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                         <div className="bg-white rounded-lg border border-blue-100 p-3">
                             <div className="text-xs text-slate-500">Marge obstacle</div>
                             <div className="font-bold text-slate-800">
-                                {recommendedAlt.min_clearance_m.toFixed(2)} m
+                                {formatClearance(recommendedAlt.min_clearance_m)}
                             </div>
                         </div>
                     </div>
@@ -421,8 +436,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                                         <div>Énergie : <span className="font-semibold">{alt.energy.toFixed(2)} J</span></div>
                                         <div>Temps : <span className="font-semibold">{alt.flight_time_seconds.toFixed(2)} s</span></div>
                                         <div>Distance : <span className="font-semibold">{alt.distance_m.toFixed(2)} m</span></div>
-                                        <div>Marge obstacle : <span className="font-semibold">{alt.min_clearance_m.toFixed(2)} m</span></div>
-                                        <div>Buffer restant : <span className="font-semibold">{alt.buffer_clearance_m.toFixed(2)} m</span></div>
+                                        <div>Marge obstacle : <span className="font-semibold">{formatClearance(alt.min_clearance_m)}</span></div>
+                                        <div>Buffer restant : <span className="font-semibold">{formatClearance(alt.buffer_clearance_m)}</span></div>
+                                        <div>Risque : <span className="font-semibold">{formatRisk(alt.risk)}</span></div>
                                     </div>
 
                                     {!alt.credible && alt.rejection_reasons.length > 0 && (
