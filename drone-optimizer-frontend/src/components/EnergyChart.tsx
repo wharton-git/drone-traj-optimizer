@@ -1,52 +1,145 @@
 import React, { useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { type OptimizationResponse } from '../types';
+import {
+    ResponsiveContainer,
+    ScatterChart,
+    Scatter,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ReferenceLine,
+    Cell
+} from 'recharts';
+import type { OptimizationResponse } from '../types';
 
 interface EnergyChartProps {
     data?: OptimizationResponse;
+    selectedProfile: string | null;
+    setSelectedProfile: (profile: string | null) => void;
 }
 
-const EnergyChart: React.FC<EnergyChartProps> = ({ data }) => {
+const profileLabels: Record<string, string> = {
+    eco: 'Éco',
+    balanced: 'Équilibré',
+    safe: 'Sûr',
+    fast: 'Rapide'
+};
 
-    // Génération de la série de données pour le comparatif Recharts
+const profileStroke: Record<string, string> = {
+    eco: '#16a34a',
+    balanced: '#2563eb',
+    safe: '#7c3aed',
+    fast: '#ea580c',
+    baseline: '#94a3b8'
+};
+
+const CustomTooltip = ({ active, payload }: any) => {
+    if (!active || !payload || payload.length === 0) return null;
+
+    const point = payload[0].payload;
+
+    return (
+        <div className="rounded-lg border border-slate-200 bg-white shadow-lg p-3 text-xs">
+            <div className="font-bold text-slate-800 mb-2">{point.label}</div>
+            <div className="space-y-1 text-slate-600">
+                <div>Temps : <span className="font-semibold">{point.x.toFixed(2)} s</span></div>
+                <div>Énergie : <span className="font-semibold">{point.y.toFixed(2)} J</span></div>
+                {'distance_m' in point && (
+                    <div>Distance : <span className="font-semibold">{point.distance_m.toFixed(2)} m</span></div>
+                )}
+                {'min_clearance_m' in point && (
+                    <div>Marge : <span className="font-semibold">{point.min_clearance_m.toFixed(2)} m</span></div>
+                )}
+                {'weighted_score' in point && (
+                    <div>Score : <span className="font-semibold">{point.weighted_score.toFixed(4)}</span></div>
+                )}
+                {'credible' in point && (
+                    <div>
+                        Statut :{' '}
+                        <span className={`font-semibold ${point.credible ? 'text-green-700' : 'text-red-700'}`}>
+                            {point.credible ? 'Crédible' : 'Non crédible'}
+                        </span>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const EnergyChart: React.FC<EnergyChartProps> = ({ data, selectedProfile, setSelectedProfile }) => {
     const chartData = useMemo(() => {
-        if (!data || !data.success || !data.baseline || !data.optimized) return [];
+        if (!data || !data.success) return [];
 
-        return [
-            {
-                name: 'Trajet Naïf (Vmax)',
-                'Énergie Consommée': data.baseline.energy,
-                fill: '#94a3b8' // Gris (Baseline)
-            },
-            {
-                name: 'Trajet PNL (Optimal)',
-                'Énergie Consommée': data.optimized.energy,
-                fill: data.optimized.energy > data.battery_capacity ? '#ef4444' : '#22c55e'
-            }
-        ];
+        const baselinePoint = {
+            profile: 'baseline',
+            label: 'Trajet naïf',
+            x: data.baseline.flight_time_seconds,
+            y: data.baseline.energy,
+            energy: data.baseline.energy,
+            flight_time_seconds: data.baseline.flight_time_seconds
+        };
+
+        const alternatives = data.alternatives.map((alt) => ({
+            ...alt,
+            label: `${profileLabels[alt.profile] ?? alt.profile}${alt.profile === data.recommended_profile ? ' (recommandé)' : ''}`,
+            x: alt.flight_time_seconds,
+            y: alt.energy
+        }));
+
+        return [baselinePoint, ...alternatives];
     }, [data]);
 
     if (!data) {
         return (
             <div className="w-full h-full flex items-center justify-center text-slate-400">
-                Lancez l'optimisation pour visualiser le comparatif énergétique.
+                Lancez l'optimisation pour visualiser les compromis ADMC.
             </div>
         );
     }
 
     return (
         <div className="w-full h-full flex flex-col pt-2">
-            <h3 className="text-sm font-bold text-slate-700 mb-4 px-4">Comparatif Énergétique (Joules)</h3>
+            <div className="flex items-center justify-between mb-4 px-4">
+                <div>
+                    <h3 className="text-sm font-bold text-slate-700">Compromis multicritères</h3>
+                    <p className="text-xs text-slate-500">
+                        Axe X : temps • Axe Y : énergie • Cliquez une alternative dans la colonne de gauche ou sur la carte.
+                    </p>
+                </div>
+                {selectedProfile && (
+                    <button
+                        type="button"
+                        onClick={() => setSelectedProfile(data.recommended_profile)}
+                        className="text-xs border border-slate-300 rounded px-2 py-1 bg-white hover:bg-slate-50"
+                    >
+                        Revenir au profil recommandé
+                    </button>
+                )}
+            </div>
+
             <div className="grow">
                 <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                    <ScatterChart margin={{ top: 20, right: 30, left: 20, bottom: 10 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                        <XAxis dataKey="name" tick={{ fontSize: 13, fontWeight: 500 }} tickLine={false} />
-                        <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-                        <Tooltip
-                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                            cursor={{ fill: 'transparent' }}
+                        <XAxis
+                            type="number"
+                            dataKey="x"
+                            name="Temps"
+                            unit=" s"
+                            tick={{ fontSize: 12 }}
+                            axisLine={false}
+                            tickLine={false}
                         />
+                        <YAxis
+                            type="number"
+                            dataKey="y"
+                            name="Énergie"
+                            unit=" J"
+                            tick={{ fontSize: 12 }}
+                            axisLine={false}
+                            tickLine={false}
+                        />
+                        <Tooltip content={<CustomTooltip />} cursor={{ strokeDasharray: '4 4' }} />
 
                         {data.battery_capacity && (
                             <ReferenceLine
@@ -56,7 +149,7 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ data }) => {
                                 strokeWidth={2}
                                 label={{
                                     position: 'top',
-                                    value: `Capacité Batterie Max (${data.battery_capacity} J)`,
+                                    value: `Batterie max (${data.battery_capacity} J)`,
                                     fill: '#ef4444',
                                     fontSize: 12,
                                     fontWeight: 'bold'
@@ -64,12 +157,42 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ data }) => {
                             />
                         )}
 
-                        <Bar
-                            dataKey="Énergie Consommée"
-                            radius={[6, 6, 0, 0]}
-                            maxBarSize={80}
-                        />
-                    </BarChart>
+                        <Scatter
+                            data={chartData}
+                            shape={(props: any) => {
+                                const { cx, cy, payload } = props;
+                                const isSelected = payload.profile === selectedProfile;
+                                const isRecommended = payload.profile === data.recommended_profile;
+                                const fill = profileStroke[payload.profile] ?? '#2563eb';
+                                const radius = payload.profile === 'baseline' ? 7 : isSelected ? 10 : isRecommended ? 9 : 7;
+
+                                return (
+                                    <g
+                                        style={{ cursor: payload.profile !== 'baseline' ? 'pointer' : 'default' }}
+                                        onClick={() => {
+                                            if (payload.profile !== 'baseline') {
+                                                setSelectedProfile(payload.profile);
+                                            }
+                                        }}
+                                    >
+                                        <circle
+                                            cx={cx}
+                                            cy={cy}
+                                            r={radius}
+                                            fill={fill}
+                                            stroke={payload.credible === false ? '#dc2626' : '#ffffff'}
+                                            strokeWidth={payload.credible === false ? 3 : 2}
+                                            opacity={payload.profile === 'baseline' ? 0.9 : 0.95}
+                                        />
+                                    </g>
+                                );
+                            }}
+                        >
+                            {chartData.map((entry) => (
+                                <Cell key={`${entry.profile}-${entry.x}-${entry.y}`} />
+                            ))}
+                        </Scatter>
+                    </ScatterChart>
                 </ResponsiveContainer>
             </div>
         </div>
