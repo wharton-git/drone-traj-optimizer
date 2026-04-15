@@ -14,6 +14,7 @@ export interface CriteriaWeights {
 
 export interface OptimizationPayload {
     wind_speed: number;
+    wind_direction_deg: number;
     drone_mass: number;
     battery_capacity: number;
     start_point: Coordinate;

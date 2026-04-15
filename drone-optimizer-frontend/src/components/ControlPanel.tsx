@@ -71,6 +71,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     setSelectedProfile
 }) => {
     const [windSpeed, setWindSpeed] = useState<number>(5.0);
+    const [windDirectionDeg, setWindDirectionDeg] = useState<number>(0);
     const [droneMass, setDroneMass] = useState<number>(1.2);
     const [weights, setWeights] = useState<CriteriaWeights>({
         energy: 30,
@@ -104,6 +105,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
 
         onSimulate({
             wind_speed: windSpeed,
+            wind_direction_deg: windDirectionDeg,
             drone_mass: droneMass,
             battery_capacity: batteryCapacity,
             start_point: startCoord,
@@ -122,7 +124,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
             <form onSubmit={handleSubmit} className="space-y-4">
                 <h2 className="text-lg font-semibold text-slate-800 border-b pb-2">Paramètres initiaux</h2>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                     <div>
                         <label className="block text-xs font-medium text-slate-500 mb-1">Vent (m/s)</label>
                         <input
@@ -134,6 +136,22 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                             value={windSpeed}
                             onChange={(e) => setWindSpeed(parseFloat(e.target.value))}
                         />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Direction vent (°)</label>
+                        <input
+                            type="number"
+                            step="1"
+                            min="0"
+                            max="360"
+                            required
+                            className="w-full p-2 border border-slate-300 rounded text-sm"
+                            value={windDirectionDeg}
+                            onChange={(e) => setWindDirectionDeg(parseFloat(e.target.value))}
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1">
+                            0° = Est, 90° = Nord
+                        </p>
                     </div>
                     <div>
                         <label className="block text-xs font-medium text-slate-500 mb-1">Masse (kg)</label>

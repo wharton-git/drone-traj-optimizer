@@ -22,6 +22,26 @@ MAX_DETOUR_FACTOR = 3.0
 # largeur du corridor de recherche autour de la mission
 SEARCH_MARGIN_M = 2000.0
 
+def wind_vector_from_speed_direction(wind_speed, wind_direction_deg):
+    """
+    Convention :
+    - 0° = vers l'Est
+    - 90° = vers le Nord
+    - angle mesuré dans le plan cartésien local (x Est, y Nord)
+    """
+    theta = math.radians(wind_direction_deg)
+    wx = wind_speed * math.cos(theta)
+    wy = wind_speed * math.sin(theta)
+    return np.array([wx, wy], dtype=float)
+
+
+def segment_unit_vector(A, B):
+    vec = B - A
+    norm = np.linalg.norm(vec)
+    if norm <= 1e-9:
+        return np.array([1.0, 0.0], dtype=float)
+    return vec / norm
+
 
 def to_cartesian(coord, ref):
     lat, lon = coord
@@ -50,12 +70,17 @@ def point_to_segment_distance(A, B, P):
     return float(np.linalg.norm(P - projection))
 
 
-def calculate_power(v, wind_speed, drone_mass):
+def calculate_power_for_segment(v, A, B, wind_vector, drone_mass):
     v = max(v, 0.1)
     k1 = 0.5
     k2 = 100.0 * drone_mass
-    v_rel = v - wind_speed
-    return float(k1 * (v_rel ** 2) + (k2 / v))
+
+    direction = segment_unit_vector(A, B)
+    drone_velocity_vector = v * direction
+    relative_velocity_vector = drone_velocity_vector - wind_vector
+    relative_speed = np.linalg.norm(relative_velocity_vector)
+
+    return float(k1 * (relative_speed ** 2) + (k2 / v))
 
 
 def normalize_weights(weights: dict) -> dict:
@@ -137,11 +162,10 @@ def compute_clearance_stats(pts, no_go_zones, start_coord):
     }
 
 
-def evaluate_metrics(v, pts, wind_speed, drone_mass, start_coord, no_go_zones):
+def evaluate_metrics(v, pts, wind_vector, drone_mass, start_coord, no_go_zones):
     total_dist = compute_path_distance(pts)
     flight_time = total_dist / max(v, 0.1)
-    power = calculate_power(v, wind_speed, drone_mass)
-    energy = power * flight_time
+    energy = compute_energy_for_path(v, pts, wind_vector, drone_mass)
 
     clearance_stats = compute_clearance_stats(pts, no_go_zones, start_coord)
 
@@ -203,20 +227,20 @@ def build_bounds(A, B, n_wp):
     return bounds
 
 
-def build_reference_scales(A, B, wind_speed, drone_mass, start_coord, no_go_zones):
+def build_reference_scales(A, B, wind_vector, drone_mass, start_coord, no_go_zones):
     direct_dist = compute_direct_distance(A, B)
     direct_dist = max(direct_dist, 1.0)
 
     reference_speed = 15.0
     reference_time = direct_dist / reference_speed
-    reference_energy = calculate_power(reference_speed, wind_speed, drone_mass) * reference_time
+    reference_energy = compute_energy_for_path(reference_speed, [A, B], wind_vector, drone_mass)
     reference_risk = 1.0
 
     if no_go_zones:
         direct_metrics = evaluate_metrics(
             reference_speed,
             [A, B],
-            wind_speed,
+            wind_vector,
             drone_mass,
             start_coord,
             no_go_zones,
@@ -231,12 +255,12 @@ def build_reference_scales(A, B, wind_speed, drone_mass, start_coord, no_go_zone
     }
 
 
-def build_weighted_objective(profile_weights, scales, wind_speed, drone_mass, start_coord, no_go_zones, get_points_callable):
+def build_weighted_objective(profile_weights, scales, wind_vector, drone_mass, start_coord, no_go_zones, get_points_callable):
     w = normalize_weights(profile_weights)
 
     def objective(x):
         v, pts = get_points_callable(x)
-        metrics = evaluate_metrics(v, pts, wind_speed, drone_mass, start_coord, no_go_zones)
+        metrics = evaluate_metrics(v, pts, wind_vector, drone_mass, start_coord, no_go_zones)
 
         score = (
             w["energy"] * (metrics["energy"] / scales["energy"])
@@ -271,7 +295,7 @@ def evaluate_credibility(alt, direct_distance):
     return credible, reasons
 
 
-def solve_single_profile(profile_name, profile_weights, wind_speed, drone_mass, start_coord, end_coord, no_go_zones, battery_capacity):
+def solve_single_profile(profile_name, profile_weights, wind_vector, drone_mass, start_coord, end_coord, no_go_zones, battery_capacity):
     A = to_cartesian(start_coord, ref=start_coord)
     B = to_cartesian(end_coord, ref=start_coord)
 
@@ -283,17 +307,17 @@ def solve_single_profile(profile_name, profile_weights, wind_speed, drone_mass, 
 
     bounds = build_bounds(A, B, n_wp)
     constraints = build_constraints(no_go_zones, start_coord, n_wp + 1, get_points)
-    scales = build_reference_scales(A, B, wind_speed, drone_mass, start_coord, no_go_zones)
+    scales = build_reference_scales(A, B, wind_vector, drone_mass, start_coord, no_go_zones)
 
     objective = build_weighted_objective(
-        profile_weights=profile_weights,
-        scales=scales,
-        wind_speed=wind_speed,
-        drone_mass=drone_mass,
-        start_coord=start_coord,
-        no_go_zones=no_go_zones,
-        get_points_callable=get_points,
-    )
+    profile_weights=profile_weights,
+    scales=scales,
+    wind_vector=wind_vector,
+    drone_mass=drone_mass,
+    start_coord=start_coord,
+    no_go_zones=no_go_zones,
+    get_points_callable=get_points,
+)
 
     result = minimize(
         fun=objective,
@@ -308,7 +332,7 @@ def solve_single_profile(profile_name, profile_weights, wind_speed, drone_mass, 
         return None
 
     opt_v, opt_pts = get_points(result.x)
-    metrics = evaluate_metrics(opt_v, opt_pts, wind_speed, drone_mass, start_coord, no_go_zones)
+    metrics = evaluate_metrics(opt_v, opt_pts, wind_vector, drone_mass, start_coord, no_go_zones)
     path_gps = [to_latlon(p, ref=start_coord) for p in opt_pts]
 
     return {
@@ -368,13 +392,13 @@ def score_alternatives_with_user_weights(alternatives, user_weights):
     return alternatives
 
 
-def build_baseline(wind_speed, drone_mass, start_coord, end_coord):
+def build_baseline(wind_vector, drone_mass, start_coord, end_coord):
     A = to_cartesian(start_coord, ref=start_coord)
     B = to_cartesian(end_coord, ref=start_coord)
     naive_speed = 25.0
     naive_dist = float(np.linalg.norm(B - A))
     naive_time = naive_dist / naive_speed
-    naive_energy = calculate_power(naive_speed, wind_speed, drone_mass) * naive_time
+    naive_energy = compute_energy_for_path(naive_speed, [A, B], wind_vector, drone_mass)
 
     return {
         "speed": round(naive_speed, 2),
@@ -433,6 +457,7 @@ def build_decision(battery_capacity, baseline, best_alternative):
 
 def solve_optimal_speed_admc(
     wind_speed: float,
+    wind_direction_deg: float,
     drone_mass: float,
     battery_capacity: float,
     start_coord,
@@ -443,7 +468,9 @@ def solve_optimal_speed_admc(
     if user_weights is None:
         user_weights = {"energy": 0.30, "time": 0.25, "distance": 0.15, "risk": 0.30}
 
-    baseline = build_baseline(wind_speed, drone_mass, start_coord, end_coord)
+    wind_vector = wind_vector_from_speed_direction(wind_speed, wind_direction_deg)
+
+    baseline = build_baseline(wind_vector, drone_mass, start_coord, end_coord)
 
     A = to_cartesian(start_coord, ref=start_coord)
     B = to_cartesian(end_coord, ref=start_coord)
@@ -454,7 +481,7 @@ def solve_optimal_speed_admc(
         alt = solve_single_profile(
             profile_name=profile_name,
             profile_weights=profile_weights,
-            wind_speed=wind_speed,
+            wind_vector=wind_vector,
             drone_mass=drone_mass,
             start_coord=start_coord,
             end_coord=end_coord,
@@ -494,3 +521,20 @@ def solve_optimal_speed_admc(
         "alternatives": alternatives,
         "recommended_profile": best["profile"],
     }
+
+def compute_energy_for_path(v, pts, wind_vector, drone_mass):
+    total_energy = 0.0
+
+    for i in range(len(pts) - 1):
+        A = pts[i]
+        B = pts[i + 1]
+        segment_length = float(np.linalg.norm(B - A))
+
+        if segment_length <= 1e-9:
+            continue
+
+        flight_time = segment_length / max(v, 0.1)
+        power = calculate_power_for_segment(v, A, B, wind_vector, drone_mass)
+        total_energy += power * flight_time
+
+    return float(total_energy)

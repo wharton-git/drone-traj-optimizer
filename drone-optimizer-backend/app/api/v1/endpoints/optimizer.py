@@ -19,6 +19,7 @@ async def optimize_drone_path(request: OptimizationRequest):
 
     result = solve_optimal_speed_admc(
         wind_speed=request.wind_speed,
+        wind_direction_deg=request.wind_direction_deg,
         drone_mass=request.drone_mass,
         battery_capacity=request.battery_capacity,
         start_coord=request.start_point,

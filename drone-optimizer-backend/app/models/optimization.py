@@ -16,6 +16,7 @@ class CriteriaWeights(BaseModel):
 
 class OptimizationRequest(BaseModel):
     wind_speed: float
+    wind_direction_deg: float = 0.0
     drone_mass: float
     battery_capacity: float
     start_point: Tuple[float, float]
