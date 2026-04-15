@@ -22,6 +22,10 @@ interface ControlPanelProps {
     data?: OptimizationResponse;
     selectedProfile: string | null;
     setSelectedProfile: (profile: string | null) => void;
+    windSpeed: number;
+    setWindSpeed: (val: number) => void;
+    windDirectionDeg: number;
+    setWindDirectionDeg: (val: number) => void;
 }
 
 const profileLabels: Record<string, string> = {
@@ -68,10 +72,12 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     setNoGoZones,
     data,
     selectedProfile,
-    setSelectedProfile
+    setSelectedProfile,
+    windSpeed,
+    setWindSpeed,
+    windDirectionDeg,
+    setWindDirectionDeg
 }) => {
-    const [windSpeed, setWindSpeed] = useState<number>(5.0);
-    const [windDirectionDeg, setWindDirectionDeg] = useState<number>(0);
     const [droneMass, setDroneMass] = useState<number>(1.2);
     const [weights, setWeights] = useState<CriteriaWeights>({
         energy: 30,

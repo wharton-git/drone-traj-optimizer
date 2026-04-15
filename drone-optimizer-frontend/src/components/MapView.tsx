@@ -23,6 +23,19 @@ const DefaultIcon = L.icon({
     iconAnchor: [12, 41]
 });
 
+const directionLabel = (deg: number) => {
+    const d = ((deg % 360) + 360) % 360;
+
+    if (d >= 337.5 || d < 22.5) return 'Est';
+    if (d < 67.5) return 'Nord-Est';
+    if (d < 112.5) return 'Nord';
+    if (d < 157.5) return 'Nord-Ouest';
+    if (d < 202.5) return 'Ouest';
+    if (d < 247.5) return 'Sud-Ouest';
+    if (d < 292.5) return 'Sud';
+    return 'Sud-Est';
+};
+
 L.Marker.prototype.options.icon = DefaultIcon;
 
 interface MapViewProps {
@@ -37,6 +50,8 @@ interface MapViewProps {
     setEndCoord: (c: Coordinate) => void;
     noGoZones: NoGoZone[];
     setNoGoZones: (zones: NoGoZone[]) => void;
+    windSpeed: number;
+    windDirectionDeg: number;
 }
 
 const profileLabels: Record<string, string> = {
@@ -86,7 +101,7 @@ const SearchControl: React.FC = () => {
     };
 
     return (
-        <div className="absolute top-4 right-4 z-[1000] bg-white p-2 rounded shadow-md flex gap-2">
+        <div className="absolute top-4 right-4 z-1000 bg-white p-2 rounded shadow-md flex gap-2">
             <form onSubmit={handleSearch} className="flex">
                 <input
                     type="text"
@@ -112,7 +127,7 @@ const MapLegend: React.FC<{
     if (!alternatives || alternatives.length === 0) return null;
 
     return (
-        <div className="absolute top-4 left-4 z-[1000] bg-white/95 border border-slate-200 rounded-xl shadow-lg p-3 min-w-[220px]">
+        <div className="absolute top-4 left-4 z-1000 bg-white/95 border border-slate-200 rounded-xl shadow-lg p-3 min-w-55">
             <div className="text-xs font-bold text-slate-700 mb-2">Trajectoires</div>
             <div className="space-y-2">
                 {alternatives.map((alt) => {
@@ -156,6 +171,42 @@ const MapLegend: React.FC<{
     );
 };
 
+const WindIndicator: React.FC<{
+    windSpeed: number;
+    windDirectionDeg: number;
+}> = ({ windSpeed, windDirectionDeg }) => {
+    return (
+        <div className="absolute bottom-4 right-4 z-1000 bg-white/95 border border-slate-200 rounded-xl shadow-lg px-4 py-3 min-w-42.5">
+            <div className="text-xs font-bold text-slate-700 mb-2">Vent</div>
+
+            <div className="flex items-center gap-3">
+                <div className="relative w-12 h-12 flex items-center justify-center rounded-full border border-slate-300 bg-slate-50">
+                    <div
+                        className="text-blue-600 text-xl font-bold leading-none transition-transform"
+                        style={{
+                            transform: `rotate(${windDirectionDeg}deg)`
+                        }}
+                    >
+                        →
+                    </div>
+                </div>
+
+                <div className="text-xs text-slate-600">
+                    <div>
+                        Vitesse : <span className="font-semibold">{windSpeed.toFixed(1)} m/s</span>
+                    </div>
+                    <div>
+                        Direction : <span className="font-semibold">{windDirectionDeg.toFixed(0)}° ({directionLabel(windDirectionDeg)})</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-1">
+                        0° = Est, 90° = Nord
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const MapView: React.FC<MapViewProps> = ({
     path,
     alternatives,
@@ -167,7 +218,9 @@ const MapView: React.FC<MapViewProps> = ({
     endCoord,
     setEndCoord,
     noGoZones,
-    setNoGoZones
+    setNoGoZones,
+    windSpeed,
+    windDirectionDeg
 }) => {
     const [clickedCoord, setClickedCoord] = useState<Coordinate | null>(null);
 
@@ -212,6 +265,10 @@ const MapView: React.FC<MapViewProps> = ({
                     recommendedProfile={recommendedProfile}
                     selectedProfile={selectedProfile}
                     setSelectedProfile={setSelectedProfile}
+                />
+                <WindIndicator
+                    windSpeed={windSpeed}
+                    windDirectionDeg={windDirectionDeg}
                 />
                 <MapInteractionHandler setClickedCoord={setClickedCoord} />
 
