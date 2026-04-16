@@ -2,12 +2,14 @@ import { useMutation } from '@tanstack/react-query';
 import axios from 'axios';
 import type { OptimizationPayload, OptimizationResponse } from '../types';
 
+
 const optimizeTrajectory = async (payload: OptimizationPayload): Promise<OptimizationResponse> => {
+    const baseURL = import.meta.env.VITE_API_BASE_URL;
 
     console.log(payload);
-    
+
     const response = await axios.post<OptimizationResponse>(
-        'http://localhost:8000/api/v1/optimize',
+        `${baseURL}/api/v1/optimize`,
         payload
     );
 
