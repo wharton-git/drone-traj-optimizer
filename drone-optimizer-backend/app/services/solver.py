@@ -12,6 +12,7 @@ PROFILE_WEIGHTS = {
 
 PARETO_OBJECTIVE_KEYS = ("energy", "flight_time_seconds", "distance_m", "risk")
 PARETO_EPSILON = 1e-9
+WEIGHT_KEYS = ("energy", "time", "distance", "risk")
 
 MIN_SPEED = 5.0
 MAX_SPEED = 30.0
@@ -24,6 +25,16 @@ MAX_DETOUR_FACTOR = 3.0
 
 # largeur du corridor de recherche autour de la mission
 SEARCH_MARGIN_M = 2000.0
+
+# grille discrète pour échantillonner un Pareto dense sans exploser le temps de calcul
+GENERATED_WEIGHT_GRID_UNITS = 4
+
+# seuils de déduplication pragmatiques pour éliminer les solutions quasi identiques
+GENERATED_SPEED_DEDUP_TOL = 0.35
+GENERATED_ENERGY_REL_TOL = 0.02
+GENERATED_TIME_REL_TOL = 0.02
+GENERATED_DISTANCE_REL_TOL = 0.01
+GENERATED_RISK_REL_TOL = 0.05
 
 def wind_vector_from_speed_direction(wind_speed, wind_direction_deg):
     """
@@ -91,6 +102,46 @@ def normalize_weights(weights: dict) -> dict:
     if total <= 0:
         return {"energy": 0.30, "time": 0.25, "distance": 0.15, "risk": 0.30}
     return {k: max(0.0, float(v)) / total for k, v in weights.items()}
+
+
+def rounded_weights(weights: dict, digits=4) -> dict:
+    normalized = normalize_weights(weights)
+    return {k: round(float(normalized[k]), digits) for k in WEIGHT_KEYS}
+
+
+def relative_difference(a, b):
+    return abs(float(a) - float(b)) / max(abs(float(a)), abs(float(b)), 1.0)
+
+
+def build_generated_weight_vectors(grid_units=GENERATED_WEIGHT_GRID_UNITS):
+    weight_vectors = []
+
+    for energy_units in range(grid_units + 1):
+        for time_units in range(grid_units - energy_units + 1):
+            for distance_units in range(grid_units - energy_units - time_units + 1):
+                risk_units = grid_units - energy_units - time_units - distance_units
+
+                weights = rounded_weights(
+                    {
+                        "energy": energy_units,
+                        "time": time_units,
+                        "distance": distance_units,
+                        "risk": risk_units,
+                    }
+                )
+                weight_vectors.append(weights)
+
+    weight_vectors.sort(
+        key=lambda weights: (
+            -max(weights.values()),
+            sum(value > 0 for value in weights.values()),
+            -weights["energy"],
+            -weights["time"],
+            -weights["distance"],
+            -weights["risk"],
+        )
+    )
+    return weight_vectors
 
 
 def build_initial_guess(A, B, n_wp, speed_guess=15.0):
@@ -305,15 +356,108 @@ def dominates(candidate, target, objective_keys=PARETO_OBJECTIVE_KEYS):
     )
 
 
-def annotate_pareto_front(alternatives):
+def annotate_pareto_front(alternatives, flag_key="pareto_optimal"):
+    for alt in alternatives:
+        alt[flag_key] = False
+
     for i, alt in enumerate(alternatives):
-        alt["pareto_optimal"] = not any(
+        alt[flag_key] = not any(
             dominates(other, alt)
             for j, other in enumerate(alternatives)
             if i != j
         )
 
     return alternatives
+
+
+def generated_solutions_are_equivalent(candidate, reference):
+    risk_close = True
+    if max(candidate["risk"], reference["risk"]) > 1e-9:
+        risk_close = relative_difference(candidate["risk"], reference["risk"]) <= GENERATED_RISK_REL_TOL
+
+    return (
+        abs(candidate["speed"] - reference["speed"]) <= GENERATED_SPEED_DEDUP_TOL
+        and relative_difference(candidate["energy"], reference["energy"]) <= GENERATED_ENERGY_REL_TOL
+        and relative_difference(candidate["flight_time_seconds"], reference["flight_time_seconds"]) <= GENERATED_TIME_REL_TOL
+        and relative_difference(candidate["distance_m"], reference["distance_m"]) <= GENERATED_DISTANCE_REL_TOL
+        and risk_close
+    )
+
+
+def build_generated_solution(base_alternative, source_weights):
+    return {
+        "id": "",
+        "label": "",
+        "source_weights": rounded_weights(source_weights),
+        "speed": base_alternative["speed"],
+        "energy": base_alternative["energy"],
+        "flight_time_seconds": base_alternative["flight_time_seconds"],
+        "distance_m": base_alternative["distance_m"],
+        "risk": base_alternative["risk"],
+        "min_clearance_m": base_alternative["min_clearance_m"],
+        "buffer_clearance_m": base_alternative["buffer_clearance_m"],
+        "feasible_battery": base_alternative["feasible_battery"],
+        "credible": base_alternative["credible"],
+        "is_pareto_optimal": False,
+        "rejection_reasons": list(base_alternative["rejection_reasons"]),
+        "path": base_alternative["path"],
+    }
+
+
+def deduplicate_generated_alternatives(generated_alternatives):
+    sorted_candidates = sorted(
+        generated_alternatives,
+        key=lambda alt: (
+            not alt["credible"],
+            not alt["feasible_battery"],
+            alt["risk"],
+            alt["energy"],
+            alt["flight_time_seconds"],
+            alt["distance_m"],
+        )
+    )
+
+    deduplicated = []
+    for candidate in sorted_candidates:
+        if any(generated_solutions_are_equivalent(candidate, kept) for kept in deduplicated):
+            continue
+        deduplicated.append(candidate)
+
+    deduplicated.sort(
+        key=lambda alt: (
+            alt["flight_time_seconds"],
+            alt["energy"],
+            alt["distance_m"],
+            alt["risk"],
+        )
+    )
+
+    for index, alternative in enumerate(deduplicated, start=1):
+        alternative["id"] = f"gen-{index:02d}"
+        alternative["label"] = f"G{index:02d}"
+
+    return deduplicated
+
+
+def select_generated_pareto_basis(generated_alternatives):
+    credible_and_feasible = [
+        alt for alt in generated_alternatives
+        if alt["credible"] and alt["feasible_battery"]
+    ]
+    if credible_and_feasible:
+        return "credible_and_feasible", credible_and_feasible
+
+    feasible_only = [
+        alt for alt in generated_alternatives
+        if alt["feasible_battery"]
+    ]
+    if feasible_only:
+        return "feasible_only", feasible_only
+
+    if generated_alternatives:
+        return "all_generated", generated_alternatives
+
+    return "none", []
 
 
 def solve_single_profile(profile_name, profile_weights, wind_vector, drone_mass, start_coord, end_coord, no_go_zones, battery_capacity):
@@ -331,14 +475,14 @@ def solve_single_profile(profile_name, profile_weights, wind_vector, drone_mass,
     scales = build_reference_scales(A, B, wind_vector, drone_mass, start_coord, no_go_zones)
 
     objective = build_weighted_objective(
-    profile_weights=profile_weights,
-    scales=scales,
-    wind_vector=wind_vector,
-    drone_mass=drone_mass,
-    start_coord=start_coord,
-    no_go_zones=no_go_zones,
-    get_points_callable=get_points,
-)
+        profile_weights=profile_weights,
+        scales=scales,
+        wind_vector=wind_vector,
+        drone_mass=drone_mass,
+        start_coord=start_coord,
+        no_go_zones=no_go_zones,
+        get_points_callable=get_points,
+    )
 
     result = minimize(
         fun=objective,
@@ -373,6 +517,35 @@ def solve_single_profile(profile_name, profile_weights, wind_vector, drone_mass,
         "rejection_reasons": [],
         "path": path_gps,
     }
+
+
+def solve_generated_alternative(
+    source_weights,
+    wind_vector,
+    drone_mass,
+    battery_capacity,
+    start_coord,
+    end_coord,
+    no_go_zones,
+    direct_distance,
+):
+    generated_seed = solve_single_profile(
+        profile_name="generated_seed",
+        profile_weights=source_weights,
+        wind_vector=wind_vector,
+        drone_mass=drone_mass,
+        start_coord=start_coord,
+        end_coord=end_coord,
+        no_go_zones=no_go_zones,
+        battery_capacity=battery_capacity,
+    )
+    if generated_seed is None:
+        return None
+
+    credible, reasons = evaluate_credibility(generated_seed, direct_distance)
+    generated_seed["credible"] = credible
+    generated_seed["rejection_reasons"] = reasons
+    return build_generated_solution(generated_seed, source_weights)
 
 
 def score_alternatives_with_user_weights(alternatives, user_weights):
@@ -477,6 +650,58 @@ def build_decision(battery_capacity, baseline, best_alternative):
     return {"status": status, "message": msg}
 
 
+def generate_dense_pareto_alternatives(
+    wind_vector,
+    drone_mass,
+    battery_capacity,
+    start_coord,
+    end_coord,
+    no_go_zones,
+    direct_distance,
+):
+    generated_candidates = []
+
+    for source_weights in build_generated_weight_vectors():
+        generated_alt = solve_generated_alternative(
+            source_weights=source_weights,
+            wind_vector=wind_vector,
+            drone_mass=drone_mass,
+            battery_capacity=battery_capacity,
+            start_coord=start_coord,
+            end_coord=end_coord,
+            no_go_zones=no_go_zones,
+            direct_distance=direct_distance,
+        )
+        if generated_alt is not None:
+            generated_candidates.append(generated_alt)
+
+    generated_alternatives = deduplicate_generated_alternatives(generated_candidates)
+    generated_pareto_basis, pareto_basis_alternatives = select_generated_pareto_basis(generated_alternatives)
+
+    for alternative in generated_alternatives:
+        alternative["is_pareto_optimal"] = False
+
+    if pareto_basis_alternatives:
+        annotate_pareto_front(
+            pareto_basis_alternatives,
+            flag_key="is_pareto_optimal",
+        )
+
+    pareto_front_generated = [
+        alternative["id"]
+        for alternative in generated_alternatives
+        if alternative["is_pareto_optimal"]
+    ]
+
+    return {
+        "pareto_generated_alternatives": generated_alternatives,
+        "pareto_front_generated": pareto_front_generated,
+        "generated_count": len(generated_alternatives),
+        "pareto_generated_count": len(pareto_front_generated),
+        "generated_pareto_basis": generated_pareto_basis,
+    }
+
+
 def solve_optimal_speed_admc(
     wind_speed: float,
     wind_direction_deg: float,
@@ -523,12 +748,26 @@ def solve_optimal_speed_admc(
             "optimized": {"speed": 0, "energy": 0, "flight_time_seconds": 0},
             "path": [],
             "alternatives": [],
+            "pareto_generated_alternatives": [],
+            "pareto_front_generated": [],
+            "generated_count": 0,
+            "pareto_generated_count": 0,
+            "generated_pareto_basis": "none",
             "recommended_profile": "",
         }
 
     alternatives = annotate_pareto_front(alternatives)
     alternatives = score_alternatives_with_user_weights(alternatives, user_weights)
     best = choose_best_alternative(alternatives)
+    generated_pareto = generate_dense_pareto_alternatives(
+        wind_vector=wind_vector,
+        drone_mass=drone_mass,
+        battery_capacity=battery_capacity,
+        start_coord=start_coord,
+        end_coord=end_coord,
+        no_go_zones=no_go_zones,
+        direct_distance=direct_distance,
+    )
 
     optimized = {
         "speed": best["speed"],
@@ -542,6 +781,11 @@ def solve_optimal_speed_admc(
         "optimized": optimized,
         "path": best["path"],
         "alternatives": alternatives,
+        "pareto_generated_alternatives": generated_pareto["pareto_generated_alternatives"],
+        "pareto_front_generated": generated_pareto["pareto_front_generated"],
+        "generated_count": generated_pareto["generated_count"],
+        "pareto_generated_count": generated_pareto["pareto_generated_count"],
+        "generated_pareto_basis": generated_pareto["generated_pareto_basis"],
         "recommended_profile": best["profile"],
     }
 

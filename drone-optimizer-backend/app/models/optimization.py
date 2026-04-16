@@ -2,6 +2,14 @@ from pydantic import BaseModel, Field
 from typing import List, Tuple, Optional, Literal
 
 
+GeneratedParetoBasis = Literal[
+    "credible_and_feasible",
+    "feasible_only",
+    "all_generated",
+    "none",
+]
+
+
 class NoGoZone(BaseModel):
     center: Tuple[float, float]
     radius: float
@@ -56,6 +64,24 @@ class AlternativeResult(BaseModel):
     path: List[Tuple[float, float]]
 
 
+class GeneratedAlternativeResult(BaseModel):
+    id: str
+    label: str
+    source_weights: CriteriaWeights
+    speed: float
+    energy: float
+    flight_time_seconds: float
+    distance_m: float
+    risk: float
+    min_clearance_m: float
+    buffer_clearance_m: float
+    feasible_battery: bool
+    credible: bool
+    is_pareto_optimal: bool
+    rejection_reasons: List[str]
+    path: List[Tuple[float, float]]
+
+
 class Decision(BaseModel):
     status: Literal["GO", "WARNING", "NO_GO"]
     message: str
@@ -67,6 +93,11 @@ class OptimizationResponse(BaseModel):
     battery_capacity: float
     path: List[Tuple[float, float]]
     alternatives: List[AlternativeResult]
+    pareto_generated_alternatives: List[GeneratedAlternativeResult]
+    pareto_front_generated: List[str]
+    generated_count: int
+    pareto_generated_count: int
+    generated_pareto_basis: GeneratedParetoBasis
     recommended_profile: str
     decision: Decision
     success: bool

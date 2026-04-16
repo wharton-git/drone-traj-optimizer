@@ -46,12 +46,45 @@ export interface AlternativeResult {
     path: Coordinate[];
 }
 
+export interface GeneratedAlternativeResult {
+    id: string;
+    label: string;
+    source_weights: CriteriaWeights;
+    speed: number;
+    energy: number;
+    flight_time_seconds: number;
+    distance_m: number;
+    risk: number;
+    min_clearance_m: number;
+    buffer_clearance_m: number;
+    feasible_battery: boolean;
+    credible: boolean;
+    is_pareto_optimal: boolean;
+    rejection_reasons: string[];
+    path: Coordinate[];
+}
+
+export type GeneratedParetoBasis =
+    | 'credible_and_feasible'
+    | 'feasible_only'
+    | 'all_generated'
+    | 'none';
+
+export type SolutionSelection =
+    | { kind: 'main'; id: string }
+    | { kind: 'generated'; id: string };
+
 export interface OptimizationResponse {
     baseline: ScenarioResult;
     optimized: ScenarioResult;
     battery_capacity: number;
     path: Coordinate[];
     alternatives: AlternativeResult[];
+    pareto_generated_alternatives: GeneratedAlternativeResult[];
+    pareto_front_generated: string[];
+    generated_count: number;
+    pareto_generated_count: number;
+    generated_pareto_basis: GeneratedParetoBasis;
     recommended_profile: string;
     decision: {
         status: 'GO' | 'WARNING' | 'NO_GO';

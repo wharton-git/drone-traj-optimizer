@@ -11,7 +11,13 @@ import {
 } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import type { Coordinate, NoGoZone, AlternativeResult } from '../types';
+import type {
+    Coordinate,
+    NoGoZone,
+    AlternativeResult,
+    GeneratedAlternativeResult,
+    SolutionSelection
+} from '../types';
 
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
@@ -41,9 +47,10 @@ L.Marker.prototype.options.icon = DefaultIcon;
 interface MapViewProps {
     path?: Coordinate[];
     alternatives?: AlternativeResult[];
+    generatedAlternatives?: GeneratedAlternativeResult[];
     recommendedProfile?: string;
-    selectedProfile: string | null;
-    setSelectedProfile: (profile: string | null) => void;
+    selectedSolution: SolutionSelection | null;
+    setSelectedSolution: (selection: SolutionSelection | null) => void;
     startCoord: Coordinate;
     setStartCoord: (c: Coordinate) => void;
     endCoord: Coordinate;
@@ -93,10 +100,10 @@ const SearchControl: React.FC = () => {
                 const { lat, lon } = data[0];
                 map.flyTo([parseFloat(lat), parseFloat(lon)], 14);
             } else {
-                alert("Lieu non trouvé.");
+                alert('Lieu non trouvé.');
             }
         } catch (error) {
-            console.error("Erreur de recherche", error);
+            console.error('Erreur de recherche', error);
         }
     };
 
@@ -121,24 +128,24 @@ const SearchControl: React.FC = () => {
 const MapLegend: React.FC<{
     alternatives?: AlternativeResult[];
     recommendedProfile?: string;
-    selectedProfile: string | null;
-    setSelectedProfile: (profile: string | null) => void;
-}> = ({ alternatives, recommendedProfile, selectedProfile, setSelectedProfile }) => {
+    selectedMainProfile: string | null;
+    setSelectedSolution: (selection: SolutionSelection | null) => void;
+}> = ({ alternatives, recommendedProfile, selectedMainProfile, setSelectedSolution }) => {
     if (!alternatives || alternatives.length === 0) return null;
 
     return (
         <div className="absolute top-4 left-4 z-1000 bg-white/95 border border-slate-200 rounded-xl shadow-lg p-3 min-w-55">
-            <div className="text-xs font-bold text-slate-700 mb-2">Trajectoires</div>
+            <div className="text-xs font-bold text-slate-700 mb-2">Profils principaux</div>
             <div className="space-y-2">
                 {alternatives.map((alt) => {
-                    const isSelected = selectedProfile === alt.profile;
+                    const isSelected = selectedMainProfile === alt.profile;
                     const isRecommended = recommendedProfile === alt.profile;
 
                     return (
                         <button
                             key={alt.profile}
                             type="button"
-                            onClick={() => setSelectedProfile(alt.profile)}
+                            onClick={() => setSelectedSolution({ kind: 'main', id: alt.profile })}
                             className={`w-full flex items-center justify-between gap-3 px-2 py-1.5 rounded text-xs border transition-colors ${isSelected ? 'bg-slate-100 border-slate-400' : 'bg-white border-slate-200 hover:bg-slate-50'
                                 }`}
                         >
@@ -158,7 +165,7 @@ const MapLegend: React.FC<{
                                     </span>
                                 )}
                                 {alt.pareto_optimal && (
-                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-600 text-white">
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-sky-600 text-white">
                                         pareto
                                     </span>
                                 )}
@@ -215,9 +222,10 @@ const WindIndicator: React.FC<{
 const MapView: React.FC<MapViewProps> = ({
     path,
     alternatives,
+    generatedAlternatives,
     recommendedProfile,
-    selectedProfile,
-    setSelectedProfile,
+    selectedSolution,
+    setSelectedSolution,
     startCoord,
     setStartCoord,
     endCoord,
@@ -228,6 +236,9 @@ const MapView: React.FC<MapViewProps> = ({
     windDirectionDeg
 }) => {
     const [clickedCoord, setClickedCoord] = useState<Coordinate | null>(null);
+
+    const selectedMainProfile = selectedSolution?.kind === 'main' ? selectedSolution.id : null;
+    const selectedGeneratedId = selectedSolution?.kind === 'generated' ? selectedSolution.id : null;
 
     const handleSetStart = () => {
         if (clickedCoord) {
@@ -250,11 +261,26 @@ const MapView: React.FC<MapViewProps> = ({
         }
     };
 
-    const selectedAlternative = alternatives?.find((alt) => alt.profile === selectedProfile) ?? null;
+    const selectedAlternative = alternatives?.find((alt) => alt.profile === selectedMainProfile) ?? null;
+    const selectedGeneratedAlternative = generatedAlternatives?.find((alt) => alt.id === selectedGeneratedId) ?? null;
     const recommendedAlternative = alternatives?.find((alt) => alt.profile === recommendedProfile) ?? null;
 
-    const visiblePath = selectedAlternative?.path ?? path;
-    const visibleProfile = selectedAlternative?.profile ?? recommendedAlternative?.profile ?? null;
+    const visiblePath = selectedGeneratedAlternative?.path ?? selectedAlternative?.path ?? path;
+    const visibleColor = selectedGeneratedAlternative
+        ? '#059669'
+        : selectedAlternative
+            ? (profileStroke[selectedAlternative.profile] ?? '#16a34a')
+            : '#16a34a';
+
+    const visibleLabel = selectedGeneratedAlternative
+        ? `Trajectoire générée : ${selectedGeneratedAlternative.label}`
+        : selectedAlternative
+            ? `Trajectoire affichée : ${profileLabels[selectedAlternative.profile] ?? selectedAlternative.profile}`
+            : 'Trajectoire optimisée';
+
+    const recommendationOpacity = selectedGeneratedAlternative || (selectedAlternative && selectedAlternative.profile !== recommendedProfile)
+        ? 0.35
+        : 0.9;
 
     return (
         <div className="w-full h-full relative">
@@ -268,8 +294,8 @@ const MapView: React.FC<MapViewProps> = ({
                 <MapLegend
                     alternatives={alternatives}
                     recommendedProfile={recommendedProfile}
-                    selectedProfile={selectedProfile}
-                    setSelectedProfile={setSelectedProfile}
+                    selectedMainProfile={selectedMainProfile}
+                    setSelectedSolution={setSelectedSolution}
                 />
                 <WindIndicator
                     windSpeed={windSpeed}
@@ -326,7 +352,7 @@ const MapView: React.FC<MapViewProps> = ({
                         pathOptions={{
                             color: '#2563eb',
                             weight: 4,
-                            opacity: selectedProfile && selectedProfile !== recommendedAlternative.profile ? 0.35 : 0.9,
+                            opacity: recommendationOpacity,
                             dashArray: '8 8'
                         }}
                     >
@@ -340,16 +366,12 @@ const MapView: React.FC<MapViewProps> = ({
                     <Polyline
                         positions={visiblePath}
                         pathOptions={{
-                            color: visibleProfile ? (profileStroke[visibleProfile] ?? '#16a34a') : '#16a34a',
-                            weight: 5,
+                            color: visibleColor,
+                            weight: selectedGeneratedAlternative ? 6 : 5,
                             opacity: 0.95
                         }}
                     >
-                        <Popup>
-                            {visibleProfile
-                                ? `Trajectoire affichée : ${profileLabels[visibleProfile] ?? visibleProfile}`
-                                : 'Trajectoire optimisée'}
-                        </Popup>
+                        <Popup>{visibleLabel}</Popup>
                     </Polyline>
                 )}
             </MapContainer>
