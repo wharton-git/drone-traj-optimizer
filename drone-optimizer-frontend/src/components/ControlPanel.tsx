@@ -2,12 +2,8 @@ import React, { useMemo, useState } from 'react';
 import type {
     OptimizationPayload,
     Coordinate,
-    OptimizationResponse,
     NoGoZone,
-    CriteriaWeights,
-    AlternativeResult,
-    GeneratedAlternativeResult,
-    SolutionSelection
+    CriteriaWeights
 } from '../types';
 
 interface ControlPanelProps {
@@ -21,80 +17,11 @@ interface ControlPanelProps {
     setBatteryCapacity: (val: number) => void;
     noGoZones: NoGoZone[];
     setNoGoZones: (zones: NoGoZone[]) => void;
-    data?: OptimizationResponse;
-    selectedSolution: SolutionSelection | null;
-    setSelectedSolution: (selection: SolutionSelection | null) => void;
     windSpeed: number;
     setWindSpeed: (val: number) => void;
     windDirectionDeg: number;
     setWindDirectionDeg: (val: number) => void;
 }
-
-const CLEARANCE_SENTINEL_THRESHOLD = 1e5;
-
-const formatClearance = (value: number) => {
-    if (!Number.isFinite(value) || value >= CLEARANCE_SENTINEL_THRESHOLD) {
-        return 'N/A';
-    }
-    return `${value.toFixed(2)} m`;
-};
-
-const formatRisk = (value: number) => {
-    if (!Number.isFinite(value)) return 'N/A';
-    if (value === 0) return 'N/A';
-    return value.toFixed(6);
-};
-
-const formatWeightsCompact = (weights: CriteriaWeights) => (
-    `E ${Math.round(weights.energy * 100)}% • T ${Math.round(weights.time * 100)}% • D ${Math.round(weights.distance * 100)}% • R ${Math.round(weights.risk * 100)}%`
-);
-
-const profileLabels: Record<string, string> = {
-    eco: 'Éco',
-    balanced: 'Équilibré',
-    safe: 'Sûr',
-    fast: 'Rapide'
-};
-
-const generatedBasisLabels: Record<string, string> = {
-    credible_and_feasible: 'crédibles et compatibles batterie',
-    feasible_only: 'compatibles batterie',
-    all_generated: 'toutes les solutions générées',
-    none: 'aucune solution générée'
-};
-
-const badgeClassForDecision = (status: string) => {
-    if (status === 'GO') return 'bg-green-50 border-green-400 text-green-900';
-    if (status === 'WARNING') return 'bg-amber-50 border-amber-400 text-amber-900';
-    return 'bg-red-50 border-red-400 text-red-900';
-};
-
-const altCardClass = (alt: AlternativeResult, isSelected: boolean, recommendedProfile?: string) => {
-    const isRecommended = recommendedProfile === alt.profile;
-
-    if (!alt.credible) {
-        return `border rounded-xl p-3 transition-all ${isSelected ? 'border-red-500 ring-2 ring-red-200 bg-red-50' : 'border-red-200 bg-red-50'
-            }`;
-    }
-
-    if (isRecommended) {
-        return `border rounded-xl p-3 transition-all ${isSelected ? 'border-blue-600 ring-2 ring-blue-200 bg-blue-50' : 'border-blue-300 bg-blue-50'
-            }`;
-    }
-
-    return `border rounded-xl p-3 transition-all ${isSelected ? 'border-slate-700 ring-2 ring-slate-200 bg-slate-50' : 'border-slate-200 bg-white'
-        }`;
-};
-
-const generatedCardClass = (alt: GeneratedAlternativeResult, isSelected: boolean) => {
-    if (!alt.credible) {
-        return `border rounded-xl p-3 transition-all ${isSelected ? 'border-red-500 ring-2 ring-red-200 bg-red-50' : 'border-red-200 bg-red-50'
-            }`;
-    }
-
-    return `border rounded-xl p-3 transition-all ${isSelected ? 'border-emerald-600 ring-2 ring-emerald-200 bg-emerald-50' : 'border-emerald-200 bg-white'
-        }`;
-};
 
 const ControlPanel: React.FC<ControlPanelProps> = ({
     onSimulate,
@@ -107,9 +34,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     setBatteryCapacity,
     noGoZones,
     setNoGoZones,
-    data,
-    selectedSolution,
-    setSelectedSolution,
     windSpeed,
     setWindSpeed,
     windDirectionDeg,
@@ -158,27 +82,17 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         });
     };
 
-    const selectedMainId = selectedSolution?.kind === 'main' ? selectedSolution.id : null;
-    const selectedGeneratedId = selectedSolution?.kind === 'generated' ? selectedSolution.id : null;
-
-    const recommendedAlt = data?.alternatives?.find(
-        (alt) => alt.profile === data.recommended_profile
-    );
-    const mainParetoFront = data?.alternatives?.filter((alt) => alt.pareto_optimal) ?? [];
-    const generatedParetoSolutions = useMemo(() => {
-        if (!data?.pareto_generated_alternatives) return [];
-
-        return data.pareto_generated_alternatives
-            .filter((alt) => alt.is_pareto_optimal)
-            .sort((a, b) => a.flight_time_seconds - b.flight_time_seconds || a.energy - b.energy);
-    }, [data?.pareto_generated_alternatives]);
-
     return (
         <div className="space-y-6">
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <h2 className="text-lg font-semibold text-slate-800 border-b pb-2">Paramètres initiaux</h2>
+            <div className="pb-4 border-b border-slate-200">
+                <h2 className="text-lg font-semibold text-slate-900">Configuration</h2>
+                <p className="text-sm text-slate-500">
+                    Paramètres mission, contraintes et préférences ADMC.
+                </p>
+            </div>
 
-                <div className="grid grid-cols-3 gap-4">
+            <form onSubmit={handleSubmit} className="space-y-5">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
                     <div>
                         <label className="block text-xs font-medium text-slate-500 mb-1">Vent (m/s)</label>
                         <input
@@ -343,269 +257,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                 <button
                     type="submit"
                     disabled={isPending}
-                    className="w-full mt-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold py-2 px-4 rounded transition-colors"
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold py-2.5 px-4 rounded transition-colors"
                 >
                     {isPending ? 'Résolution ADMC...' : "Lancer l'Optimisation ADMC"}
                 </button>
             </form>
-
-            {data?.decision && (
-                <div className={`p-4 rounded-md border ${badgeClassForDecision(data.decision.status)}`}>
-                    <div className="flex items-center justify-between gap-3 mb-2">
-                        <span className="font-bold text-lg">{data.decision.status}</span>
-                        {recommendedAlt && (
-                            <span className="text-xs font-semibold px-2 py-1 rounded-full bg-white/80 border border-current">
-                                Profil recommandé : {profileLabels[recommendedAlt.profile] ?? recommendedAlt.profile}
-                            </span>
-                        )}
-                    </div>
-                    <p className="text-sm font-medium leading-relaxed">{data.decision.message}</p>
-                </div>
-            )}
-
-            {data?.success && recommendedAlt && (
-                <div className="p-4 rounded-xl border border-blue-200 bg-blue-50">
-                    <h3 className="font-semibold text-blue-900 mb-3">Synthèse de la recommandation</h3>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div className="bg-white rounded-lg border border-blue-100 p-3">
-                            <div className="text-xs text-slate-500">Profil</div>
-                            <div className="font-bold text-slate-800">
-                                {profileLabels[recommendedAlt.profile] ?? recommendedAlt.profile}
-                            </div>
-                        </div>
-                        <div className="bg-white rounded-lg border border-blue-100 p-3">
-                            <div className="text-xs text-slate-500">Score</div>
-                            <div className="font-bold text-slate-800">
-                                {recommendedAlt.weighted_score.toFixed(4)}
-                            </div>
-                        </div>
-                        <div className="bg-white rounded-lg border border-blue-100 p-3">
-                            <div className="text-xs text-slate-500">Énergie</div>
-                            <div className="font-bold text-slate-800">
-                                {recommendedAlt.energy.toFixed(2)} J
-                            </div>
-                        </div>
-                        <div className="bg-white rounded-lg border border-blue-100 p-3">
-                            <div className="text-xs text-slate-500">Temps</div>
-                            <div className="font-bold text-slate-800">
-                                {recommendedAlt.flight_time_seconds.toFixed(2)} s
-                            </div>
-                        </div>
-                        <div className="bg-white rounded-lg border border-blue-100 p-3">
-                            <div className="text-xs text-slate-500">Distance</div>
-                            <div className="font-bold text-slate-800">
-                                {recommendedAlt.distance_m.toFixed(2)} m
-                            </div>
-                        </div>
-                        <div className="bg-white rounded-lg border border-blue-100 p-3">
-                            <div className="text-xs text-slate-500">Marge obstacle</div>
-                            <div className="font-bold text-slate-800">
-                                {formatClearance(recommendedAlt.min_clearance_m)}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {data?.success && mainParetoFront.length > 0 && (
-                <div className="p-4 rounded-xl border border-sky-200 bg-sky-50">
-                    <div className="flex items-center justify-between gap-3 mb-2">
-                        <h3 className="font-semibold text-sky-900">Pareto des profils principaux</h3>
-                        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-white/80 border border-sky-300 text-sky-800">
-                            {mainParetoFront.length} solution{mainParetoFront.length > 1 ? 's' : ''} non dominée{mainParetoFront.length > 1 ? 's' : ''}
-                        </span>
-                    </div>
-                    <p className="text-sm text-sky-900/80">
-                        Cette vue concerne uniquement les 4 profils historiques. Ils restent la base
-                        de la recommandation ADMC lisible.
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                        {mainParetoFront.map((alt) => (
-                            <button
-                                key={`main-pareto-${alt.profile}`}
-                                type="button"
-                                onClick={() => setSelectedSolution({ kind: 'main', id: alt.profile })}
-                                className="text-xs font-semibold px-3 py-1.5 rounded-full border border-sky-300 bg-white text-sky-900 hover:bg-sky-100 transition-colors"
-                            >
-                                {profileLabels[alt.profile] ?? alt.profile}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {data?.success && (
-                <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50">
-                    <div className="flex items-center justify-between gap-3 mb-2">
-                        <h3 className="font-semibold text-emerald-900">Front de Pareto dense</h3>
-                        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-white/80 border border-emerald-300 text-emerald-800">
-                            {data.pareto_generated_count} / {data.generated_count} sur le front
-                        </span>
-                    </div>
-
-                    <p className="text-sm text-emerald-900/80">
-                        Les 4 profils principaux servent à la décision ADMC. Les solutions générées
-                        élargissent l'exploration du compromis et le front dense montre les solutions
-                        non dominées sur cet ensemble échantillonné.
-                    </p>
-
-                    <div className="grid grid-cols-3 gap-3 mt-3 text-sm">
-                        <div className="bg-white rounded-lg border border-emerald-100 p-3">
-                            <div className="text-xs text-slate-500">Générées</div>
-                            <div className="font-bold text-slate-800">{data.generated_count}</div>
-                        </div>
-                        <div className="bg-white rounded-lg border border-emerald-100 p-3">
-                            <div className="text-xs text-slate-500">Pareto dense</div>
-                            <div className="font-bold text-slate-800">{data.pareto_generated_count}</div>
-                        </div>
-                        <div className="bg-white rounded-lg border border-emerald-100 p-3">
-                            <div className="text-xs text-slate-500">Base utilisée</div>
-                            <div className="font-bold text-slate-800">{generatedBasisLabels[data.generated_pareto_basis] ?? data.generated_pareto_basis}</div>
-                        </div>
-                    </div>
-
-                    {generatedParetoSolutions.length > 0 ? (
-                        <div className="mt-4 space-y-2 max-h-80 overflow-y-auto pr-1">
-                            {generatedParetoSolutions.map((alt) => {
-                                const isSelected = selectedGeneratedId === alt.id;
-                                return (
-                                    <button
-                                        key={alt.id}
-                                        type="button"
-                                        onClick={() => setSelectedSolution({ kind: 'generated', id: alt.id })}
-                                        className={`w-full text-left ${generatedCardClass(alt, isSelected)}`}
-                                    >
-                                        <div className="flex justify-between items-start gap-3 mb-2">
-                                            <div>
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                    <span className="font-bold text-slate-800">{alt.label}</span>
-                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white">
-                                                        PARETO DENSE
-                                                    </span>
-                                                    {!alt.credible && (
-                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-600 text-white">
-                                                            NON CRÉDIBLE
-                                                        </span>
-                                                    )}
-                                                    {!alt.feasible_battery && (
-                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500 text-white">
-                                                            BATTERIE KO
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <div className="text-[11px] text-slate-500 mt-1">
-                                                    Poids source : {formatWeightsCompact(alt.source_weights)}
-                                                </div>
-                                            </div>
-                                            <div className="text-right text-[11px] text-slate-600">
-                                                <div>Temps : <span className="font-semibold text-slate-800">{alt.flight_time_seconds.toFixed(2)} s</span></div>
-                                                <div>Énergie : <span className="font-semibold text-slate-800">{alt.energy.toFixed(2)} J</span></div>
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-700">
-                                            <div>Distance : <span className="font-semibold">{alt.distance_m.toFixed(2)} m</span></div>
-                                            <div>Risque : <span className="font-semibold">{formatRisk(alt.risk)}</span></div>
-                                            <div>Marge obstacle : <span className="font-semibold">{formatClearance(alt.min_clearance_m)}</span></div>
-                                            <div>Buffer restant : <span className="font-semibold">{formatClearance(alt.buffer_clearance_m)}</span></div>
-                                        </div>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    ) : (
-                        <div className="mt-4 rounded-lg border border-emerald-200 bg-white p-3 text-sm text-slate-600">
-                            Aucune solution Pareto dense n'a pu être isolée sur cet échantillonnage.
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {data?.alternatives && data.alternatives.length > 0 && (
-                <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-bold text-slate-800">Profils principaux ADMC</h3>
-                        <button
-                            type="button"
-                            onClick={() => setSelectedSolution({ kind: 'main', id: data.recommended_profile })}
-                            className="text-xs border border-slate-300 rounded px-2 py-1 bg-white hover:bg-slate-50"
-                        >
-                            Afficher recommandée
-                        </button>
-                    </div>
-
-                    <div className="space-y-3">
-                        {data.alternatives.map((alt) => {
-                            const isRecommended = alt.profile === data.recommended_profile;
-                            const isSelected = selectedMainId === alt.profile;
-
-                            return (
-                                <button
-                                    key={alt.profile}
-                                    type="button"
-                                    onClick={() => setSelectedSolution({ kind: 'main', id: alt.profile })}
-                                    className={`w-full text-left ${altCardClass(alt, isSelected, data.recommended_profile)}`}
-                                >
-                                    <div className="flex justify-between items-start gap-3 mb-2">
-                                        <div>
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="font-bold text-slate-800">
-                                                    {profileLabels[alt.profile] ?? alt.profile}
-                                                </span>
-                                                {isRecommended && (
-                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white">
-                                                        RECOMMANDÉ
-                                                    </span>
-                                                )}
-                                                {alt.pareto_optimal && (
-                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-600 text-white">
-                                                        PARETO V1
-                                                    </span>
-                                                )}
-                                                {!alt.credible && (
-                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-600 text-white">
-                                                        NON CRÉDIBLE
-                                                    </span>
-                                                )}
-                                                {!alt.feasible_battery && (
-                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500 text-white">
-                                                        BATTERIE KO
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div className="text-xs text-slate-500 mt-1">
-                                                Cliquez pour afficher cette trajectoire sur la carte.
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-[11px] text-slate-500">Score</div>
-                                            <div className="font-mono font-bold text-slate-800">
-                                                {alt.weighted_score.toFixed(4)}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-700">
-                                        <div>Vitesse : <span className="font-semibold">{alt.speed.toFixed(2)} m/s</span></div>
-                                        <div>Énergie : <span className="font-semibold">{alt.energy.toFixed(2)} J</span></div>
-                                        <div>Temps : <span className="font-semibold">{alt.flight_time_seconds.toFixed(2)} s</span></div>
-                                        <div>Distance : <span className="font-semibold">{alt.distance_m.toFixed(2)} m</span></div>
-                                        <div>Marge obstacle : <span className="font-semibold">{formatClearance(alt.min_clearance_m)}</span></div>
-                                        <div>Buffer restant : <span className="font-semibold">{formatClearance(alt.buffer_clearance_m)}</span></div>
-                                        <div>Risque : <span className="font-semibold">{formatRisk(alt.risk)}</span></div>
-                                    </div>
-
-                                    {!alt.credible && alt.rejection_reasons.length > 0 && (
-                                        <div className="mt-3 text-[11px] text-red-700 bg-white/70 border border-red-200 rounded p-2">
-                                            Rejet : {alt.rejection_reasons.join(', ')}
-                                        </div>
-                                    )}
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
         </div>
     );
 };
