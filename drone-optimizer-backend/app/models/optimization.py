@@ -51,6 +51,7 @@ class AlternativeResult(BaseModel):
     weighted_score: float
     feasible_battery: bool
     credible: bool
+    pareto_optimal: bool
     rejection_reasons: List[str]
     path: List[Tuple[float, float]]
 

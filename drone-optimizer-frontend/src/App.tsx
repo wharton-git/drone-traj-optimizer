@@ -83,6 +83,11 @@ const App: React.FC = () => {
                   Score : <span className="font-mono font-bold text-slate-700">{selectedAlternative.weighted_score.toFixed(4)}</span>
                 </li>
                 <li>
+                  Pareto : <span className="font-mono font-bold text-slate-700">
+                    {selectedAlternative.pareto_optimal ? 'Oui' : 'Non'}
+                  </span>
+                </li>
+                <li>
                   Marge obstacle : <span className="font-mono font-bold text-slate-700">
                     {selectedAlternative.min_clearance_m >= 1e5 ? 'N/A' : `${selectedAlternative.min_clearance_m.toFixed(2)} m`}
                   </span>
@@ -123,11 +128,7 @@ const App: React.FC = () => {
             setNoGoZones={setNoGoZones}
             windSpeed={windSpeed}
             windDirectionDeg={windDirectionDeg}
-          /><div>
-            Direction : <span className="font-semibold">{windDirectionDeg.toFixed(0)}°</span>
-          </div><div>
-            Direction : <span className="font-semibold">{windDirectionDeg.toFixed(0)}°</span>
-          </div>
+          />
         </section>
 
         <section className="h-[40%] w-full p-4 border-t border-slate-300 bg-white z-10 relative min-w-0">

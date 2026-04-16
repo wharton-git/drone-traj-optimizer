@@ -157,6 +157,11 @@ const MapLegend: React.FC<{
                                         reco
                                     </span>
                                 )}
+                                {alt.pareto_optimal && (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-600 text-white">
+                                        pareto
+                                    </span>
+                                )}
                                 {!alt.credible && (
                                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-600 text-white">
                                         rejet

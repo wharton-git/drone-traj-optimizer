@@ -1,2 +1,4 @@
 /drone-optimizer-backend/backend.zip
 /drone-optimizer-frontend/frontend.zip
+.codex
+*.zip

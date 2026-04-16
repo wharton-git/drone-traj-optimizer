@@ -139,6 +139,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     const recommendedAlt = data?.alternatives?.find(
         (alt) => alt.profile === data.recommended_profile
     );
+    const paretoFront = data?.alternatives?.filter((alt) => alt.pareto_optimal) ?? [];
 
     return (
         <div className="space-y-6">
@@ -374,6 +375,34 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                 </div>
             )}
 
+            {data?.success && paretoFront.length > 0 && (
+                <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50">
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                        <h3 className="font-semibold text-emerald-900">Front de Pareto</h3>
+                        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-white/80 border border-emerald-300 text-emerald-800">
+                            {paretoFront.length} solution{paretoFront.length > 1 ? 's' : ''} non dominée{paretoFront.length > 1 ? 's' : ''}
+                        </span>
+                    </div>
+                    <p className="text-sm text-emerald-900/80">
+                        Ces trajectoires ne sont dominées par aucune autre sur le quatuor
+                        énergie, temps, distance et risque. Le graphe trace leur projection
+                        en front de Pareto.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        {paretoFront.map((alt) => (
+                            <button
+                                key={`pareto-${alt.profile}`}
+                                type="button"
+                                onClick={() => setSelectedProfile(alt.profile)}
+                                className="text-xs font-semibold px-3 py-1.5 rounded-full border border-emerald-300 bg-white text-emerald-900 hover:bg-emerald-100 transition-colors"
+                            >
+                                {profileLabels[alt.profile] ?? alt.profile}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {data?.alternatives && data.alternatives.length > 0 && (
                 <div className="space-y-3">
                     <div className="flex items-center justify-between">
@@ -406,6 +435,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                                                 {isRecommended && (
                                                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white">
                                                         RECOMMANDÉ
+                                                    </span>
+                                                )}
+                                                {alt.pareto_optimal && (
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white">
+                                                        PARETO
                                                     </span>
                                                 )}
                                                 {!alt.credible && (

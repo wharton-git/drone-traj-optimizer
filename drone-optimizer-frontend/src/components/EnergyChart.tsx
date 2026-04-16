@@ -77,6 +77,14 @@ const CustomTooltip = ({ active, payload }: any) => {
                         </span>
                     </div>
                 )}
+                {'pareto_optimal' in point && (
+                    <div>
+                        Pareto :{' '}
+                        <span className={`font-semibold ${point.pareto_optimal ? 'text-emerald-700' : 'text-slate-500'}`}>
+                            {point.pareto_optimal ? 'Oui' : 'Non'}
+                        </span>
+                    </div>
+                )}
                 {'risk' in point && (
                     <div>Risque : <span className="font-semibold">{formatRisk(point.risk)}</span></div>
                 )}
@@ -108,6 +116,19 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ data, selectedProfile, setSel
         return [baselinePoint, ...alternatives];
     }, [data]);
 
+    const paretoFrontData = useMemo(() => {
+        if (!data || !data.success) return [];
+
+        return data.alternatives
+            .filter((alt) => alt.pareto_optimal)
+            .map((alt) => ({
+                ...alt,
+                x: alt.flight_time_seconds,
+                y: alt.energy,
+            }))
+            .sort((a, b) => a.x - b.x);
+    }, [data]);
+
     if (!data) {
         return (
             <div className="w-full h-full flex items-center justify-center text-slate-400">
@@ -122,7 +143,7 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ data, selectedProfile, setSel
                 <div>
                     <h3 className="text-sm font-bold text-slate-700">Compromis multicritères</h3>
                     <p className="text-xs text-slate-500">
-                        Axe X : temps • Axe Y : énergie • Cliquez une alternative dans la colonne de gauche ou sur la carte.
+                        Axe X : temps • Axe Y : énergie • Le trait vert matérialise la projection du front de Pareto.
                     </p>
                 </div>
                 {selectedProfile && (
@@ -176,6 +197,15 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ data, selectedProfile, setSel
                             />
                         )}
 
+                        {paretoFrontData.length >= 2 && (
+                            <Scatter
+                                data={paretoFrontData}
+                                line={{ stroke: '#059669', strokeWidth: 2.5 }}
+                                shape={() => null}
+                                isAnimationActive={false}
+                            />
+                        )}
+
                         <Scatter
                             data={chartData}
                             shape={(props: any) => {
@@ -194,6 +224,18 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ data, selectedProfile, setSel
                                             }
                                         }}
                                     >
+                                        {payload.pareto_optimal && (
+                                            <circle
+                                                cx={cx}
+                                                cy={cy}
+                                                r={radius + 4}
+                                                fill="none"
+                                                stroke="#059669"
+                                                strokeWidth={2}
+                                                strokeDasharray="4 3"
+                                                opacity={0.95}
+                                            />
+                                        )}
                                         <circle
                                             cx={cx}
                                             cy={cy}

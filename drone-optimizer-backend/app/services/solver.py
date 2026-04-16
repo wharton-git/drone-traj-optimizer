@@ -10,6 +10,9 @@ PROFILE_WEIGHTS = {
     "balanced": {"energy": 0.30, "time": 0.25, "distance": 0.15, "risk": 0.30},
 }
 
+PARETO_OBJECTIVE_KEYS = ("energy", "flight_time_seconds", "distance_m", "risk")
+PARETO_EPSILON = 1e-9
+
 MIN_SPEED = 5.0
 MAX_SPEED = 30.0
 
@@ -295,6 +298,24 @@ def evaluate_credibility(alt, direct_distance):
     return credible, reasons
 
 
+def dominates(candidate, target, objective_keys=PARETO_OBJECTIVE_KEYS):
+    return (
+        all(candidate[key] <= target[key] + PARETO_EPSILON for key in objective_keys)
+        and any(candidate[key] < target[key] - PARETO_EPSILON for key in objective_keys)
+    )
+
+
+def annotate_pareto_front(alternatives):
+    for i, alt in enumerate(alternatives):
+        alt["pareto_optimal"] = not any(
+            dominates(other, alt)
+            for j, other in enumerate(alternatives)
+            if i != j
+        )
+
+    return alternatives
+
+
 def solve_single_profile(profile_name, profile_weights, wind_vector, drone_mass, start_coord, end_coord, no_go_zones, battery_capacity):
     A = to_cartesian(start_coord, ref=start_coord)
     B = to_cartesian(end_coord, ref=start_coord)
@@ -348,6 +369,7 @@ def solve_single_profile(profile_name, profile_weights, wind_vector, drone_mass,
         "weighted_score": 0.0,
         "feasible_battery": metrics["energy"] <= battery_capacity,
         "credible": False,
+        "pareto_optimal": False,
         "rejection_reasons": [],
         "path": path_gps,
     }
@@ -504,6 +526,7 @@ def solve_optimal_speed_admc(
             "recommended_profile": "",
         }
 
+    alternatives = annotate_pareto_front(alternatives)
     alternatives = score_alternatives_with_user_weights(alternatives, user_weights)
     best = choose_best_alternative(alternatives)
 

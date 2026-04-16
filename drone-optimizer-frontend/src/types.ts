@@ -41,6 +41,7 @@ export interface AlternativeResult {
     weighted_score: number;
     feasible_battery: boolean;
     credible: boolean;
+    pareto_optimal: boolean;
     rejection_reasons: string[];
     path: Coordinate[];
 }
