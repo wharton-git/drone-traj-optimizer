@@ -15,6 +15,8 @@ interface ControlPanelProps {
     setEndCoord: (c: Coordinate) => void;
     batteryCapacity: number;
     setBatteryCapacity: (val: number) => void;
+    batteryVoltage: number;
+    setBatteryVoltage: (val: number) => void;
     noGoZones: NoGoZone[];
     setNoGoZones: (zones: NoGoZone[]) => void;
     windSpeed: number;
@@ -32,6 +34,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     setEndCoord,
     batteryCapacity,
     setBatteryCapacity,
+    batteryVoltage,
+    setBatteryVoltage,
     noGoZones,
     setNoGoZones,
     windSpeed,
@@ -75,6 +79,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
             wind_direction_deg: windDirectionDeg,
             drone_mass: droneMass,
             battery_capacity: batteryCapacity,
+            battery_voltage: batteryVoltage,
             start_point: startCoord,
             end_point: endCoord,
             no_go_zones: noGoZones,
@@ -179,18 +184,35 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                     </div>
                 </div>
 
-                <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Capacité Batterie (J)</label>
-                    <input
-                        type="number"
-                        step="1000"
-                        min="1000"
-                        required
-                        className="w-full p-2 border border-slate-300 rounded text-sm"
-                        value={batteryCapacity}
-                        onChange={(e) => setBatteryCapacity(parseFloat(e.target.value))}
-                    />
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                    <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Capacité Batterie (mAh)</label>
+                        <input
+                            type="number"
+                            step="100"
+                            min="100"
+                            required
+                            className="w-full p-2 border border-slate-300 rounded text-sm"
+                            value={batteryCapacity}
+                            onChange={(e) => setBatteryCapacity(parseFloat(e.target.value))}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Tension nominale (V)</label>
+                        <input
+                            type="number"
+                            step="0.1"
+                            min="0.1"
+                            required
+                            className="w-full p-2 border border-slate-300 rounded text-sm"
+                            value={batteryVoltage}
+                            onChange={(e) => setBatteryVoltage(parseFloat(e.target.value))}
+                        />
+                    </div>
                 </div>
+                <p className="text-[10px] text-slate-400 -mt-3">
+                    Conversion utilisee : mAh = J / (3.6 x V)
+                </p>
 
                 <div className="bg-red-50 p-3 rounded border border-red-200">
                     <div className="flex justify-between items-center mb-2">

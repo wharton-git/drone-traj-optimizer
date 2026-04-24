@@ -12,7 +12,8 @@ const App: React.FC = () => {
 
   const [startCoord, setStartCoord] = useState<Coordinate>([-18.8792, 47.5079]);
   const [endCoord, setEndCoord] = useState<Coordinate>([-18.9145, 47.5312]);
-  const [batteryCapacity, setBatteryCapacity] = useState<number>(30000);
+  const [batteryCapacity, setBatteryCapacity] = useState<number>(5000);
+  const [batteryVoltage, setBatteryVoltage] = useState<number>(22.2);
   const [noGoZones, setNoGoZones] = useState<NoGoZone[]>([]);
   const [selectedSolution, setSelectedSolution] = useState<SolutionSelection | null>(null);
   const [windSpeed, setWindSpeed] = useState<number>(5);
@@ -48,6 +49,8 @@ const App: React.FC = () => {
             setEndCoord={setEndCoord}
             batteryCapacity={batteryCapacity}
             setBatteryCapacity={setBatteryCapacity}
+            batteryVoltage={batteryVoltage}
+            setBatteryVoltage={setBatteryVoltage}
             noGoZones={noGoZones}
             setNoGoZones={setNoGoZones}
             windSpeed={windSpeed}

@@ -67,6 +67,8 @@ const formatRisk = (value: number) => {
     return value.toFixed(6);
 };
 
+const formatEnergy = (value: number) => `${value.toFixed(2)} mAh`;
+
 const formatWeightsCompact = (weights: CriteriaWeights) => (
     `E ${Math.round(weights.energy * 100)}% • T ${Math.round(weights.time * 100)}% • D ${Math.round(weights.distance * 100)}% • R ${Math.round(weights.risk * 100)}%`
 );
@@ -99,7 +101,7 @@ const CustomTooltip = ({ active, payload }: any) => {
                     {point.kind === 'baseline' ? 'Baseline' : point.kind === 'main' ? 'Profil principal' : 'Solution générée'}
                 </span></div>
                 <div>Temps : <span className="font-semibold">{point.x.toFixed(2)} s</span></div>
-                <div>Énergie : <span className="font-semibold">{point.y.toFixed(2)} J</span></div>
+                <div>Énergie : <span className="font-semibold">{formatEnergy(point.y)}</span></div>
 
                 {point.kind !== 'baseline' && (
                     <>
@@ -199,7 +201,7 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ data, selectedSolution, setSe
                 <div>
                     <h3 className="text-sm font-bold text-slate-700">Compromis multicritères</h3>
                     <p className="text-xs text-slate-500">
-                        Axe X : temps • Axe Y : énergie • Nuage gris = solutions générées • front vert = Pareto dense • points colorés = profils principaux.
+                        Axe X : temps • Axe Y : énergie équivalente en mAh • Nuage gris = solutions générées • front vert = Pareto dense • points colorés = profils principaux.
                     </p>
                 </div>
                 {selectedSolution && (
@@ -230,7 +232,7 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ data, selectedSolution, setSe
                             type="number"
                             dataKey="y"
                             name="Énergie"
-                            unit=" J"
+                            unit=" mAh"
                             tick={{ fontSize: 12 }}
                             axisLine={false}
                             tickLine={false}
@@ -245,7 +247,7 @@ const EnergyChart: React.FC<EnergyChartProps> = ({ data, selectedSolution, setSe
                                 strokeWidth={2}
                                 label={{
                                     position: 'top',
-                                    value: `Batterie max (${data.battery_capacity} J)`,
+                                    value: `Batterie max (${data.battery_capacity} mAh @ ${data.battery_voltage.toFixed(1)} V)`,
                                     fill: '#ef4444',
                                     fontSize: 12,
                                     fontWeight: 'bold'

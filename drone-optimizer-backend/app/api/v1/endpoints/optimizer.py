@@ -22,6 +22,7 @@ async def optimize_drone_path(request: OptimizationRequest):
         wind_direction_deg=request.wind_direction_deg,
         drone_mass=request.drone_mass,
         battery_capacity=request.battery_capacity,
+        battery_voltage=request.battery_voltage,
         start_coord=request.start_point,
         end_coord=request.end_point,
         no_go_zones=request.no_go_zones,
@@ -41,6 +42,7 @@ async def optimize_drone_path(request: OptimizationRequest):
 
     decision_data = build_decision(
         battery_capacity=request.battery_capacity,
+        battery_voltage=request.battery_voltage,
         baseline=result["baseline"],
         best_alternative=best_alt,
     )
@@ -50,6 +52,7 @@ async def optimize_drone_path(request: OptimizationRequest):
         baseline=result["baseline"],
         optimized=result["optimized"],
         battery_capacity=request.battery_capacity,
+        battery_voltage=request.battery_voltage,
         path=result["path"],
         alternatives=result["alternatives"],
         pareto_generated_alternatives=result["pareto_generated_alternatives"],

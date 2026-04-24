@@ -196,7 +196,7 @@ const WindIndicator: React.FC<{
                     <div
                         className="text-blue-600 text-xl font-bold leading-none transition-transform"
                         style={{
-                            transform: `rotate(${windDirectionDeg}deg)`
+                            transform: `rotate(-${windDirectionDeg}deg)`
                         }}
                     >
                         →

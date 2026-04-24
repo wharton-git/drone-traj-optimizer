@@ -36,6 +36,11 @@ GENERATED_TIME_REL_TOL = 0.02
 GENERATED_DISTANCE_REL_TOL = 0.01
 GENERATED_RISK_REL_TOL = 0.05
 
+DEFAULT_BATTERY_VOLTAGE = 22.2
+SECONDS_PER_HOUR = 3600.0
+MILLIAMP_HOURS_PER_AMP_HOUR = 1000.0
+
+
 def wind_vector_from_speed_direction(wind_speed, wind_direction_deg):
     """
     Convention :
@@ -95,6 +100,13 @@ def calculate_power_for_segment(v, A, B, wind_vector, drone_mass):
     relative_speed = np.linalg.norm(relative_velocity_vector)
 
     return float(k1 * (relative_speed ** 2) + (k2 / v))
+
+
+def joules_to_milliamp_hours(energy_joules, battery_voltage):
+    safe_voltage = max(float(battery_voltage), 1e-9)
+    watt_hours = float(energy_joules) / SECONDS_PER_HOUR
+    amp_hours = watt_hours / safe_voltage
+    return float(amp_hours * MILLIAMP_HOURS_PER_AMP_HOUR)
 
 
 def normalize_weights(weights: dict) -> dict:
@@ -216,15 +228,16 @@ def compute_clearance_stats(pts, no_go_zones, start_coord):
     }
 
 
-def evaluate_metrics(v, pts, wind_vector, drone_mass, start_coord, no_go_zones):
+def evaluate_metrics(v, pts, wind_vector, drone_mass, battery_voltage, start_coord, no_go_zones):
     total_dist = compute_path_distance(pts)
     flight_time = total_dist / max(v, 0.1)
-    energy = compute_energy_for_path(v, pts, wind_vector, drone_mass)
+    energy_joules = compute_energy_for_path(v, pts, wind_vector, drone_mass)
+    energy_milliamp_hours = joules_to_milliamp_hours(energy_joules, battery_voltage)
 
     clearance_stats = compute_clearance_stats(pts, no_go_zones, start_coord)
 
     return {
-        "energy": float(energy),
+        "energy": float(energy_milliamp_hours),
         "flight_time_seconds": float(flight_time),
         "distance_m": float(total_dist),
         "risk": float(clearance_stats["risk"]),
@@ -281,13 +294,14 @@ def build_bounds(A, B, n_wp):
     return bounds
 
 
-def build_reference_scales(A, B, wind_vector, drone_mass, start_coord, no_go_zones):
+def build_reference_scales(A, B, wind_vector, drone_mass, battery_voltage, start_coord, no_go_zones):
     direct_dist = compute_direct_distance(A, B)
     direct_dist = max(direct_dist, 1.0)
 
     reference_speed = 15.0
     reference_time = direct_dist / reference_speed
-    reference_energy = compute_energy_for_path(reference_speed, [A, B], wind_vector, drone_mass)
+    reference_energy_joules = compute_energy_for_path(reference_speed, [A, B], wind_vector, drone_mass)
+    reference_energy = joules_to_milliamp_hours(reference_energy_joules, battery_voltage)
     reference_risk = 1.0
 
     if no_go_zones:
@@ -296,6 +310,7 @@ def build_reference_scales(A, B, wind_vector, drone_mass, start_coord, no_go_zon
             [A, B],
             wind_vector,
             drone_mass,
+            battery_voltage,
             start_coord,
             no_go_zones,
         )
@@ -309,12 +324,21 @@ def build_reference_scales(A, B, wind_vector, drone_mass, start_coord, no_go_zon
     }
 
 
-def build_weighted_objective(profile_weights, scales, wind_vector, drone_mass, start_coord, no_go_zones, get_points_callable):
+def build_weighted_objective(
+    profile_weights,
+    scales,
+    wind_vector,
+    drone_mass,
+    battery_voltage,
+    start_coord,
+    no_go_zones,
+    get_points_callable,
+):
     w = normalize_weights(profile_weights)
 
     def objective(x):
         v, pts = get_points_callable(x)
-        metrics = evaluate_metrics(v, pts, wind_vector, drone_mass, start_coord, no_go_zones)
+        metrics = evaluate_metrics(v, pts, wind_vector, drone_mass, battery_voltage, start_coord, no_go_zones)
 
         score = (
             w["energy"] * (metrics["energy"] / scales["energy"])
@@ -460,7 +484,17 @@ def select_generated_pareto_basis(generated_alternatives):
     return "none", []
 
 
-def solve_single_profile(profile_name, profile_weights, wind_vector, drone_mass, start_coord, end_coord, no_go_zones, battery_capacity):
+def solve_single_profile(
+    profile_name,
+    profile_weights,
+    wind_vector,
+    drone_mass,
+    start_coord,
+    end_coord,
+    no_go_zones,
+    battery_capacity,
+    battery_voltage,
+):
     A = to_cartesian(start_coord, ref=start_coord)
     B = to_cartesian(end_coord, ref=start_coord)
 
@@ -472,13 +506,14 @@ def solve_single_profile(profile_name, profile_weights, wind_vector, drone_mass,
 
     bounds = build_bounds(A, B, n_wp)
     constraints = build_constraints(no_go_zones, start_coord, n_wp + 1, get_points)
-    scales = build_reference_scales(A, B, wind_vector, drone_mass, start_coord, no_go_zones)
+    scales = build_reference_scales(A, B, wind_vector, drone_mass, battery_voltage, start_coord, no_go_zones)
 
     objective = build_weighted_objective(
         profile_weights=profile_weights,
         scales=scales,
         wind_vector=wind_vector,
         drone_mass=drone_mass,
+        battery_voltage=battery_voltage,
         start_coord=start_coord,
         no_go_zones=no_go_zones,
         get_points_callable=get_points,
@@ -497,7 +532,7 @@ def solve_single_profile(profile_name, profile_weights, wind_vector, drone_mass,
         return None
 
     opt_v, opt_pts = get_points(result.x)
-    metrics = evaluate_metrics(opt_v, opt_pts, wind_vector, drone_mass, start_coord, no_go_zones)
+    metrics = evaluate_metrics(opt_v, opt_pts, wind_vector, drone_mass, battery_voltage, start_coord, no_go_zones)
     path_gps = [to_latlon(p, ref=start_coord) for p in opt_pts]
 
     return {
@@ -524,6 +559,7 @@ def solve_generated_alternative(
     wind_vector,
     drone_mass,
     battery_capacity,
+    battery_voltage,
     start_coord,
     end_coord,
     no_go_zones,
@@ -538,6 +574,7 @@ def solve_generated_alternative(
         end_coord=end_coord,
         no_go_zones=no_go_zones,
         battery_capacity=battery_capacity,
+        battery_voltage=battery_voltage,
     )
     if generated_seed is None:
         return None
@@ -587,13 +624,14 @@ def score_alternatives_with_user_weights(alternatives, user_weights):
     return alternatives
 
 
-def build_baseline(wind_vector, drone_mass, start_coord, end_coord):
+def build_baseline(wind_vector, drone_mass, start_coord, end_coord, battery_voltage):
     A = to_cartesian(start_coord, ref=start_coord)
     B = to_cartesian(end_coord, ref=start_coord)
     naive_speed = 25.0
     naive_dist = float(np.linalg.norm(B - A))
     naive_time = naive_dist / naive_speed
-    naive_energy = compute_energy_for_path(naive_speed, [A, B], wind_vector, drone_mass)
+    naive_energy_joules = compute_energy_for_path(naive_speed, [A, B], wind_vector, drone_mass)
+    naive_energy = joules_to_milliamp_hours(naive_energy_joules, battery_voltage)
 
     return {
         "speed": round(naive_speed, 2),
@@ -614,37 +652,43 @@ def choose_best_alternative(alternatives):
     return alternatives[0]
 
 
-def build_decision(battery_capacity, baseline, best_alternative):
+def build_decision(battery_capacity, battery_voltage, baseline, best_alternative):
+    unit = "mAh"
+    voltage_note = f" (conversion a {battery_voltage:.1f} V)"
+
     if not best_alternative["feasible_battery"]:
         status = "NO_GO"
         msg = (
             f"NO-GO : aucune alternative crédible n'est compatible avec la batterie. "
             f"La meilleure option disponible est '{best_alternative['profile']}' "
-            f"mais elle nécessite {best_alternative['energy']} J pour une batterie de "
-            f"{battery_capacity} J."
+            f"mais elle nécessite {best_alternative['energy']} {unit} pour une batterie de "
+            f"{battery_capacity} {unit}{voltage_note}."
         )
     elif not best_alternative["credible"]:
         status = "WARNING"
         msg = (
             f"ATTENTION : l'alternative recommandée '{best_alternative['profile']}' "
             f"reste non crédible opérationnellement ({', '.join(best_alternative['rejection_reasons'])}). "
-            f"Énergie = {best_alternative['energy']} J, marge minimale = {best_alternative['min_clearance_m']} m."
+            f"Consommation électrique = {best_alternative['energy']} {unit}, "
+            f"marge minimale = {best_alternative['min_clearance_m']} m{voltage_note}."
         )
     elif baseline["energy"] > battery_capacity and best_alternative["energy"] <= battery_capacity:
         status = "WARNING"
         msg = (
-            f"ATTENTION : le trajet direct consommerait {baseline['energy']} J "
+            f"ATTENTION : le trajet direct consommerait {baseline['energy']} {unit} "
             f"et dépasserait la batterie. L'ADMC recommande '{best_alternative['profile']}' "
-            f"à {best_alternative['speed']} m/s, avec {best_alternative['energy']} J "
-            f"et une marge minimale de {best_alternative['min_clearance_m']} m."
+            f"à {best_alternative['speed']} m/s, avec {best_alternative['energy']} {unit} "
+            f"et une marge minimale de {best_alternative['min_clearance_m']} m{voltage_note}."
         )
     else:
         status = "GO"
         msg = (
             f"GO : l'ADMC recommande '{best_alternative['profile']}' "
             f"à {best_alternative['speed']} m/s. "
-            f"Énergie = {best_alternative['energy']} J, temps = {best_alternative['flight_time_seconds']} s, "
-            f"distance = {best_alternative['distance_m']} m, marge minimale = {best_alternative['min_clearance_m']} m."
+            f"Consommation électrique = {best_alternative['energy']} {unit}, "
+            f"temps = {best_alternative['flight_time_seconds']} s, "
+            f"distance = {best_alternative['distance_m']} m, "
+            f"marge minimale = {best_alternative['min_clearance_m']} m{voltage_note}."
         )
 
     return {"status": status, "message": msg}
@@ -654,6 +698,7 @@ def generate_dense_pareto_alternatives(
     wind_vector,
     drone_mass,
     battery_capacity,
+    battery_voltage,
     start_coord,
     end_coord,
     no_go_zones,
@@ -667,6 +712,7 @@ def generate_dense_pareto_alternatives(
             wind_vector=wind_vector,
             drone_mass=drone_mass,
             battery_capacity=battery_capacity,
+            battery_voltage=battery_voltage,
             start_coord=start_coord,
             end_coord=end_coord,
             no_go_zones=no_go_zones,
@@ -710,6 +756,7 @@ def solve_optimal_speed_admc(
     start_coord,
     end_coord,
     no_go_zones,
+    battery_voltage: float = DEFAULT_BATTERY_VOLTAGE,
     user_weights=None,
 ):
     if user_weights is None:
@@ -717,7 +764,7 @@ def solve_optimal_speed_admc(
 
     wind_vector = wind_vector_from_speed_direction(wind_speed, wind_direction_deg)
 
-    baseline = build_baseline(wind_vector, drone_mass, start_coord, end_coord)
+    baseline = build_baseline(wind_vector, drone_mass, start_coord, end_coord, battery_voltage)
 
     A = to_cartesian(start_coord, ref=start_coord)
     B = to_cartesian(end_coord, ref=start_coord)
@@ -734,6 +781,7 @@ def solve_optimal_speed_admc(
             end_coord=end_coord,
             no_go_zones=no_go_zones,
             battery_capacity=battery_capacity,
+            battery_voltage=battery_voltage,
         )
         if alt is not None:
             credible, reasons = evaluate_credibility(alt, direct_distance)
@@ -763,6 +811,7 @@ def solve_optimal_speed_admc(
         wind_vector=wind_vector,
         drone_mass=drone_mass,
         battery_capacity=battery_capacity,
+        battery_voltage=battery_voltage,
         start_coord=start_coord,
         end_coord=end_coord,
         no_go_zones=no_go_zones,

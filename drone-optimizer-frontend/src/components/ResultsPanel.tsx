@@ -69,6 +69,8 @@ const formatRisk = (value: number) => {
     return value.toFixed(6);
 };
 
+const formatEnergy = (value: number) => `${value.toFixed(2)} mAh`;
+
 const formatWeightsCompact = (weights: CriteriaWeights) => (
     `E ${Math.round(weights.energy * 100)}% • T ${Math.round(weights.time * 100)}% • D ${Math.round(weights.distance * 100)}% • R ${Math.round(weights.risk * 100)}%`
 );
@@ -287,8 +289,8 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({
                             <div className="font-bold text-slate-800">{displayedSolution.speed.toFixed(2)} m/s</div>
                         </div>
                         <div className="rounded-lg border border-slate-200 bg-white p-3">
-                            <div className="text-xs text-slate-500">Énergie</div>
-                            <div className="font-bold text-slate-800">{displayedSolution.energy.toFixed(2)} J</div>
+                            <div className="text-xs text-slate-500">Conso batt.</div>
+                            <div className="font-bold text-slate-800">{formatEnergy(displayedSolution.energy)}</div>
                         </div>
                         <div className="rounded-lg border border-slate-200 bg-white p-3">
                             <div className="text-xs text-slate-500">Temps</div>
@@ -345,7 +347,7 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({
                                     <th className="px-3 py-2">{mainHeaderLabel('Crédible', 'credible')}</th>
                                     <th className="px-3 py-2">{mainHeaderLabel('Batterie', 'feasible_battery')}</th>
                                     <th className="px-3 py-2">{mainHeaderLabel('Vitesse', 'speed')}</th>
-                                    <th className="px-3 py-2">{mainHeaderLabel('Énergie', 'energy')}</th>
+                                    <th className="px-3 py-2">{mainHeaderLabel('Énergie (mAh)', 'energy')}</th>
                                     <th className="px-3 py-2">{mainHeaderLabel('Temps', 'flight_time_seconds')}</th>
                                     <th className="px-3 py-2">{mainHeaderLabel('Distance', 'distance_m')}</th>
                                     <th className="px-3 py-2">{mainHeaderLabel('Risque', 'risk')}</th>
@@ -390,7 +392,7 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({
                                                 {alt.feasible_battery ? badge('OK', 'bg-emerald-100 text-emerald-800') : badge('BATTERIE KO', 'bg-amber-100 text-amber-800')}
                                             </td>
                                             <td className="px-3 py-2 whitespace-nowrap">{alt.speed.toFixed(2)}</td>
-                                            <td className="px-3 py-2 whitespace-nowrap">{alt.energy.toFixed(2)}</td>
+                                            <td className="px-3 py-2 whitespace-nowrap">{formatEnergy(alt.energy)}</td>
                                             <td className="px-3 py-2 whitespace-nowrap">{alt.flight_time_seconds.toFixed(2)}</td>
                                             <td className="px-3 py-2 whitespace-nowrap">{alt.distance_m.toFixed(2)}</td>
                                             <td className="px-3 py-2 whitespace-nowrap">{formatRisk(alt.risk)}</td>
@@ -424,7 +426,7 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({
                                     <th className="px-3 py-2">{generatedHeaderLabel('Crédible', 'credible')}</th>
                                     <th className="px-3 py-2">{generatedHeaderLabel('Batterie', 'feasible_battery')}</th>
                                     <th className="px-3 py-2">{generatedHeaderLabel('Vitesse', 'speed')}</th>
-                                    <th className="px-3 py-2">{generatedHeaderLabel('Énergie', 'energy')}</th>
+                                    <th className="px-3 py-2">{generatedHeaderLabel('Énergie (mAh)', 'energy')}</th>
                                     <th className="px-3 py-2">{generatedHeaderLabel('Temps', 'flight_time_seconds')}</th>
                                     <th className="px-3 py-2">{generatedHeaderLabel('Distance', 'distance_m')}</th>
                                     <th className="px-3 py-2">{generatedHeaderLabel('Risque', 'risk')}</th>
@@ -464,7 +466,7 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({
                                                 {alt.feasible_battery ? badge('OK', 'bg-emerald-100 text-emerald-800') : badge('BATTERIE KO', 'bg-amber-100 text-amber-800')}
                                             </td>
                                             <td className="px-3 py-2 whitespace-nowrap">{alt.speed.toFixed(2)}</td>
-                                            <td className="px-3 py-2 whitespace-nowrap">{alt.energy.toFixed(2)}</td>
+                                            <td className="px-3 py-2 whitespace-nowrap">{formatEnergy(alt.energy)}</td>
                                             <td className="px-3 py-2 whitespace-nowrap">{alt.flight_time_seconds.toFixed(2)}</td>
                                             <td className="px-3 py-2 whitespace-nowrap">{alt.distance_m.toFixed(2)}</td>
                                             <td className="px-3 py-2 whitespace-nowrap">{formatRisk(alt.risk)}</td>

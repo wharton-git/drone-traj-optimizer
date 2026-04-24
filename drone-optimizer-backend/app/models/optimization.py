@@ -26,7 +26,8 @@ class OptimizationRequest(BaseModel):
     wind_speed: float
     wind_direction_deg: float = 0.0
     drone_mass: float
-    battery_capacity: float
+    battery_capacity: float = Field(gt=0.0, description="Capacité batterie disponible en mAh.")
+    battery_voltage: float = Field(default=22.2, gt=0.0, description="Tension nominale batterie en V.")
     start_point: Tuple[float, float]
     end_point: Tuple[float, float]
     no_go_zones: Optional[List[NoGoZone]] = []
@@ -91,6 +92,7 @@ class OptimizationResponse(BaseModel):
     baseline: ScenarioResult
     optimized: ScenarioResult
     battery_capacity: float
+    battery_voltage: float
     path: List[Tuple[float, float]]
     alternatives: List[AlternativeResult]
     pareto_generated_alternatives: List[GeneratedAlternativeResult]

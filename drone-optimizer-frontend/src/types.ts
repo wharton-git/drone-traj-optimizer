@@ -17,6 +17,7 @@ export interface OptimizationPayload {
     wind_direction_deg: number;
     drone_mass: number;
     battery_capacity: number;
+    battery_voltage: number;
     start_point: Coordinate;
     end_point: Coordinate;
     no_go_zones: NoGoZone[];
@@ -78,6 +79,7 @@ export interface OptimizationResponse {
     baseline: ScenarioResult;
     optimized: ScenarioResult;
     battery_capacity: number;
+    battery_voltage: number;
     path: Coordinate[];
     alternatives: AlternativeResult[];
     pareto_generated_alternatives: GeneratedAlternativeResult[];
